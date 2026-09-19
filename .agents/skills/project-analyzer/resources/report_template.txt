@@ -1,0 +1,51 @@
+================================================================================
+                     COMPREHENSIVE PROJECT ANALYSIS REPORT
+Project      : {PROJECT_NAME}
+Generated At : {GENERATION_TIME}
+Tech Stack   : {TECH_STACK}
+================================================================================
+
+I. SYSTEM OVERVIEW & ARCHITECTURE
+--------------------------------------------------------------------------------
+1. Project Scope & Purpose:
+{PROJECT_GOAL}
+
+2. Codebase Metrics:
+{CODE_STATS}
+
+3. Directory Structure:
+{DIRECTORY_TREE}
+
+4. Primary Data Flow:
+{DATA_FLOW}
+
+
+II. FOUNDATIONAL & CORE LAYER ANALYSIS
+--------------------------------------------------------------------------------
+{CORE_ANALYSIS_DETAILS}
+
+
+III. BUSINESS MODULES & DOMAIN LOGIC
+--------------------------------------------------------------------------------
+{MODULES_ANALYSIS_DETAILS}
+
+
+IV. TECHNICAL DEEP DIVE & KNOWLEDGE BASE
+--------------------------------------------------------------------------------
+{TECHNICAL_CONCEPTS_AND_KNOWLEDGE}
+
+
+V. QUALITY EVALUATION & RECOMMENDATIONS
+--------------------------------------------------------------------------------
+1. Key Strengths:
+{STRENGTHS}
+
+2. Risks & Code Smells (Security, Performance, Maintainability):
+{RISKS_AND_ISSUES}
+
+3. Prioritized Improvement Roadmap:
+{RECOMMENDATIONS}
+
+================================================================================
+                                END OF REPORT
+================================================================================
