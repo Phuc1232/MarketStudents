@@ -6,7 +6,10 @@
 .env.*.local
 *.env
 !.env.example
-
+docker_commands_guide.txt
+alembic_commands_guide.txt
+OldMarketF-SRS_UnitMarket.pdf
+.ua/
 # ============================================
 # Python & Bytecode
 # ============================================

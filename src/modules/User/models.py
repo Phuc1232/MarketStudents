@@ -51,8 +51,8 @@ class User_Providers(Base, Timestamp):
     user_id=Column(INTEGER, ForeignKey("user.id"), nullable=False)
     provider_name=Column(String, nullable=False)
     provider_id=Column(String, nullable=True)
-    access_toke=Column(Text, nullable=True)
-    refesh_token=Column(Text, nullable=True)
+    access_token=Column(Text, nullable=True)
+    refresh_token=Column(Text, nullable=True)
 
     user=relationship("User", back_populates="provider")
 class userProfile(Base):

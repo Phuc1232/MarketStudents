@@ -25,7 +25,7 @@ def verify_login_google(data: GoogleAuthenRequest, db: Session= Depends(get_db))
                 db.add(new_user)
                 db.commit()
                 db.refresh(new_user)
-            new_provider=User_Providers(user_id=user.id ,provider_name="google", provider_id=google_subject_id, access_toke=data.access_token, refesh_token=data.refesh_token)
+            new_provider=User_Providers(user_id=user.id ,provider_name="google", provider_id=google_subject_id, access_token=data.access_token, refresh_token=data.refresh_token)
             db.add(new_provider)
             db.commit()
         else:

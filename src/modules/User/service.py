@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from src.api.deps import get_db
 from fastapi.security import OAuth2PasswordBearer
 from typing import Annotated
-from datetime import timedelta
-from ...Core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+#from datetime import timedelta
+#from ...Core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
 import jwt
 oauth_schemas=OAuth2PasswordBearer(tokenUrl="auth/login")
 

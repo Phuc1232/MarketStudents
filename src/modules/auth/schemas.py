@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Optional
 class Register(BaseModel):
     """
     Email: EmailStr
@@ -26,5 +27,5 @@ class TokenData(BaseModel):
 
 class GoogleAuthenRequest(BaseModel):
     id_token: str
-    access_token: str
-    refesh_token: str
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
