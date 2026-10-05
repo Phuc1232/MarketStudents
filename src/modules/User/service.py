@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from src.modules import User, TokenData, Token, Register, User_Update, User_Providers
+from src.modules import User, TokenData, Token, Register, User_Update, User_Providers, userProfile, UserProfileUpdate
 from src.share.uilts import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, timedelta, jwt
 from src.Core.security import get_password_hashed, verify_password
 from sqlalchemy import select
@@ -48,7 +48,7 @@ def delete_user_for_user(user_id: int, db: Session=Depends(get_db)):
     db.delete(user)
     db.commit()
 
-def update_user_for_user(from_update: User_Update, user_id: int , db: Session= Depends(get_db)):
+def update_pass_user_for_user(from_update: User_Update, user_id: int , db: Session= Depends(get_db)):
     user=db.get(User, user_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Loi!!!!")
@@ -95,3 +95,25 @@ def authenticate_user(username: str, password: str ,db: Session= Depends(get_db)
     access_token=create_access_token({"user_id":user.id}, access_token_expire)
     
     return Token(access_token=access_token, token_type="bearer")
+
+def get_profile (user_id: int, db: Session):
+    stmt= select(userProfile).where(userProfile.user_id==user_id)
+    profile = db.scalars(stmt).first()
+    if not profile:
+        profile = userProfile(user_id=user_id, type_mode ="Light")
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    return profile
+def update_profile (user_id: int, form: UserProfileUpdate , db: Session):
+    profile = db.get(userProfile, user_id)
+    if not profile:
+        profile = userProfile(user_id=user_id, **form.model_dump())
+        db.add(profile)
+    else:
+        for field, value in form.model_dump().items():
+            setattr(profile,field,value)
+    db.commit()
+    db.refresh(profile)
+    return profile
+    
