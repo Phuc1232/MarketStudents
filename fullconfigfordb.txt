@@ -1,0 +1,1144 @@
+-- DROP SCHEMA public;
+
+CREATE SCHEMA public AUTHORIZATION pg_database_owner;
+
+COMMENT ON SCHEMA public IS 'standard public schema';
+
+-- DROP SEQUENCE public.addresses_address_id_seq;
+
+CREATE SEQUENCE public.addresses_address_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.addresses_address_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.addresses_address_id_seq TO postgres;
+
+-- DROP SEQUENCE public.attribute_options_option_id_seq;
+
+CREATE SEQUENCE public.attribute_options_option_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.attribute_options_option_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.attribute_options_option_id_seq TO postgres;
+
+-- DROP SEQUENCE public.attributes_attribute_id_seq;
+
+CREATE SEQUENCE public.attributes_attribute_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.attributes_attribute_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.attributes_attribute_id_seq TO postgres;
+
+-- DROP SEQUENCE public.blacklists_blacklist_id_seq;
+
+CREATE SEQUENCE public.blacklists_blacklist_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.blacklists_blacklist_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.blacklists_blacklist_id_seq TO postgres;
+
+-- DROP SEQUENCE public.categories_category_id_seq;
+
+CREATE SEQUENCE public.categories_category_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.categories_category_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.categories_category_id_seq TO postgres;
+
+-- DROP SEQUENCE public.comments_comment_id_seq;
+
+CREATE SEQUENCE public.comments_comment_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.comments_comment_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.comments_comment_id_seq TO postgres;
+
+-- DROP SEQUENCE public.conversations_conversation_id_seq;
+
+CREATE SEQUENCE public.conversations_conversation_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.conversations_conversation_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.conversations_conversation_id_seq TO postgres;
+
+-- DROP SEQUENCE public.identity_verification_request_id_seq;
+
+CREATE SEQUENCE public.identity_verification_request_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.identity_verification_request_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.identity_verification_request_id_seq TO postgres;
+
+-- DROP SEQUENCE public.login_histories_history_id_seq;
+
+CREATE SEQUENCE public.login_histories_history_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.login_histories_history_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.login_histories_history_id_seq TO postgres;
+
+-- DROP SEQUENCE public.master_districts_district_id_seq;
+
+CREATE SEQUENCE public.master_districts_district_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.master_districts_district_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.master_districts_district_id_seq TO postgres;
+
+-- DROP SEQUENCE public.master_provinces_province_id_seq;
+
+CREATE SEQUENCE public.master_provinces_province_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.master_provinces_province_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.master_provinces_province_id_seq TO postgres;
+
+-- DROP SEQUENCE public.master_wards_ward_id_seq;
+
+CREATE SEQUENCE public.master_wards_ward_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.master_wards_ward_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.master_wards_ward_id_seq TO postgres;
+
+-- DROP SEQUENCE public.message_attachments_attachment_id_seq;
+
+CREATE SEQUENCE public.message_attachments_attachment_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.message_attachments_attachment_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.message_attachments_attachment_id_seq TO postgres;
+
+-- DROP SEQUENCE public.messages_message_id_seq;
+
+CREATE SEQUENCE public.messages_message_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.messages_message_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.messages_message_id_seq TO postgres;
+
+-- DROP SEQUENCE public.notifications_notification_id_seq;
+
+CREATE SEQUENCE public.notifications_notification_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.notifications_notification_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.notifications_notification_id_seq TO postgres;
+
+-- DROP SEQUENCE public.payment_transactions_payment_id_seq;
+
+CREATE SEQUENCE public.payment_transactions_payment_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.payment_transactions_payment_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.payment_transactions_payment_id_seq TO postgres;
+
+-- DROP SEQUENCE public.product_attributes_id_seq;
+
+CREATE SEQUENCE public.product_attributes_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.product_attributes_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.product_attributes_id_seq TO postgres;
+
+-- DROP SEQUENCE public.product_condition_condition_id_seq;
+
+CREATE SEQUENCE public.product_condition_condition_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.product_condition_condition_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.product_condition_condition_id_seq TO postgres;
+
+-- DROP SEQUENCE public.product_images_image_id_seq;
+
+CREATE SEQUENCE public.product_images_image_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.product_images_image_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.product_images_image_id_seq TO postgres;
+
+-- DROP SEQUENCE public.product_statuses_status_id_seq;
+
+CREATE SEQUENCE public.product_statuses_status_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.product_statuses_status_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.product_statuses_status_id_seq TO postgres;
+
+-- DROP SEQUENCE public.product_views_view_id_seq;
+
+CREATE SEQUENCE public.product_views_view_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.product_views_view_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.product_views_view_id_seq TO postgres;
+
+-- DROP SEQUENCE public.products_product_id_seq;
+
+CREATE SEQUENCE public.products_product_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.products_product_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.products_product_id_seq TO postgres;
+
+-- DROP SEQUENCE public.report_reason_reason_id_seq;
+
+CREATE SEQUENCE public.report_reason_reason_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.report_reason_reason_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.report_reason_reason_id_seq TO postgres;
+
+-- DROP SEQUENCE public.reports_report_id_seq;
+
+CREATE SEQUENCE public.reports_report_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.reports_report_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.reports_report_id_seq TO postgres;
+
+-- DROP SEQUENCE public.roles_role_id_seq;
+
+CREATE SEQUENCE public.roles_role_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.roles_role_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.roles_role_id_seq TO postgres;
+
+-- DROP SEQUENCE public.saved_searches_search_id_seq;
+
+CREATE SEQUENCE public.saved_searches_search_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.saved_searches_search_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.saved_searches_search_id_seq TO postgres;
+
+-- DROP SEQUENCE public.service_packages_package_id_seq;
+
+CREATE SEQUENCE public.service_packages_package_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.service_packages_package_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.service_packages_package_id_seq TO postgres;
+
+-- DROP SEQUENCE public.sub_categories_sub_category_id_seq;
+
+CREATE SEQUENCE public.sub_categories_sub_category_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.sub_categories_sub_category_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.sub_categories_sub_category_id_seq TO postgres;
+
+-- DROP SEQUENCE public.system_logs_log_id_seq;
+
+CREATE SEQUENCE public.system_logs_log_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.system_logs_log_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.system_logs_log_id_seq TO postgres;
+
+-- DROP SEQUENCE public.user_id_seq;
+
+CREATE SEQUENCE public.user_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.user_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.user_id_seq TO postgres;
+
+-- DROP SEQUENCE public.user_providers_id_seq;
+
+CREATE SEQUENCE public.user_providers_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.user_providers_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.user_providers_id_seq TO postgres;
+
+-- DROP SEQUENCE public.user_subscriptions_subscription_id_seq;
+
+CREATE SEQUENCE public.user_subscriptions_subscription_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.user_subscriptions_subscription_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.user_subscriptions_subscription_id_seq TO postgres;
+
+-- DROP SEQUENCE public.wallet_histories_history_id_seq;
+
+CREATE SEQUENCE public.wallet_histories_history_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.wallet_histories_history_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.wallet_histories_history_id_seq TO postgres;
+
+-- DROP SEQUENCE public.wallets_wallet_id_seq;
+
+CREATE SEQUENCE public.wallets_wallet_id_seq
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 2147483647
+	START 1
+	CACHE 1
+	NO CYCLE;
+
+-- Permissions
+
+ALTER SEQUENCE public.wallets_wallet_id_seq OWNER TO postgres;
+GRANT ALL ON SEQUENCE public.wallets_wallet_id_seq TO postgres;
+-- public.alembic_version definition
+
+-- Drop table
+
+-- DROP TABLE public.alembic_version;
+
+CREATE TABLE public.alembic_version ( version_num varchar(32) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num));
+
+-- Permissions
+
+ALTER TABLE public.alembic_version OWNER TO postgres;
+GRANT ALL ON TABLE public.alembic_version TO postgres;
+
+
+-- public.categories definition
+
+-- Drop table
+
+-- DROP TABLE public.categories;
+
+CREATE TABLE public.categories ( category_id serial4 NOT NULL, "name" varchar(100) NOT NULL, slug varchar(100) NULL, icon_url text NULL, CONSTRAINT categories_pkey PRIMARY KEY (category_id), CONSTRAINT categories_slug_key UNIQUE (slug));
+CREATE INDEX ix_categories_category_id ON public.categories USING btree (category_id);
+
+-- Permissions
+
+ALTER TABLE public.categories OWNER TO postgres;
+GRANT ALL ON TABLE public.categories TO postgres;
+
+
+-- public.master_provinces definition
+
+-- Drop table
+
+-- DROP TABLE public.master_provinces;
+
+CREATE TABLE public.master_provinces ( province_id serial4 NOT NULL, province_name varchar(100) NOT NULL, province_type varchar(50) NULL, code varchar(20) NULL, CONSTRAINT master_provinces_code_key UNIQUE (code), CONSTRAINT master_provinces_pkey PRIMARY KEY (province_id));
+CREATE INDEX ix_master_provinces_province_id ON public.master_provinces USING btree (province_id);
+
+-- Permissions
+
+ALTER TABLE public.master_provinces OWNER TO postgres;
+GRANT ALL ON TABLE public.master_provinces TO postgres;
+
+
+-- public.product_condition definition
+
+-- Drop table
+
+-- DROP TABLE public.product_condition;
+
+CREATE TABLE public.product_condition ( condition_id serial4 NOT NULL, condition_name varchar NOT NULL, "desc" varchar NULL, CONSTRAINT product_condition_pkey PRIMARY KEY (condition_id));
+
+-- Permissions
+
+ALTER TABLE public.product_condition OWNER TO postgres;
+GRANT ALL ON TABLE public.product_condition TO postgres;
+
+
+-- public.product_statuses definition
+
+-- Drop table
+
+-- DROP TABLE public.product_statuses;
+
+CREATE TABLE public.product_statuses ( status_id serial4 NOT NULL, status_name varchar(50) NOT NULL, color_code varchar(10) NULL, CONSTRAINT product_statuses_pkey PRIMARY KEY (status_id));
+CREATE INDEX ix_product_statuses_status_id ON public.product_statuses USING btree (status_id);
+
+-- Permissions
+
+ALTER TABLE public.product_statuses OWNER TO postgres;
+GRANT ALL ON TABLE public.product_statuses TO postgres;
+
+
+-- public.report_reason definition
+
+-- Drop table
+
+-- DROP TABLE public.report_reason;
+
+CREATE TABLE public.report_reason ( reason_id serial4 NOT NULL, "content" varchar NOT NULL, CONSTRAINT report_reason_pkey PRIMARY KEY (reason_id));
+CREATE INDEX ix_report_reason_reason_id ON public.report_reason USING btree (reason_id);
+
+-- Permissions
+
+ALTER TABLE public.report_reason OWNER TO postgres;
+GRANT ALL ON TABLE public.report_reason TO postgres;
+
+
+-- public.roles definition
+
+-- Drop table
+
+-- DROP TABLE public.roles;
+
+CREATE TABLE public.roles ( role_id serial4 NOT NULL, role_name varchar(50) NOT NULL, CONSTRAINT roles_pkey PRIMARY KEY (role_id), CONSTRAINT roles_role_name_key UNIQUE (role_name));
+CREATE INDEX ix_roles_role_id ON public.roles USING btree (role_id);
+
+-- Permissions
+
+ALTER TABLE public.roles OWNER TO postgres;
+GRANT ALL ON TABLE public.roles TO postgres;
+
+
+-- public.service_packages definition
+
+-- Drop table
+
+-- DROP TABLE public.service_packages;
+
+CREATE TABLE public.service_packages ( package_id serial4 NOT NULL, package_name varchar(100) NOT NULL, price float8 NOT NULL, duration int4 NULL, student_discount float8 NULL, CONSTRAINT service_packages_pkey PRIMARY KEY (package_id));
+CREATE INDEX ix_service_packages_package_id ON public.service_packages USING btree (package_id);
+
+-- Permissions
+
+ALTER TABLE public.service_packages OWNER TO postgres;
+GRANT ALL ON TABLE public.service_packages TO postgres;
+
+
+-- public.master_districts definition
+
+-- Drop table
+
+-- DROP TABLE public.master_districts;
+
+CREATE TABLE public.master_districts ( district_id serial4 NOT NULL, province_id int4 NULL, district_name varchar(100) NULL, district_type varchar(50) NULL, CONSTRAINT master_districts_pkey PRIMARY KEY (district_id), CONSTRAINT master_districts_province_id_fkey FOREIGN KEY (province_id) REFERENCES public.master_provinces(province_id));
+CREATE INDEX ix_master_districts_district_id ON public.master_districts USING btree (district_id);
+
+-- Permissions
+
+ALTER TABLE public.master_districts OWNER TO postgres;
+GRANT ALL ON TABLE public.master_districts TO postgres;
+
+
+-- public.master_wards definition
+
+-- Drop table
+
+-- DROP TABLE public.master_wards;
+
+CREATE TABLE public.master_wards ( ward_id serial4 NOT NULL, district_id int4 NULL, ward_name varchar(100) NOT NULL, ward_type varchar(50) NULL, CONSTRAINT master_wards_pkey PRIMARY KEY (ward_id), CONSTRAINT master_wards_district_id_fkey FOREIGN KEY (district_id) REFERENCES public.master_districts(district_id));
+CREATE INDEX ix_master_wards_ward_id ON public.master_wards USING btree (ward_id);
+
+-- Permissions
+
+ALTER TABLE public.master_wards OWNER TO postgres;
+GRANT ALL ON TABLE public.master_wards TO postgres;
+
+
+-- public.sub_categories definition
+
+-- Drop table
+
+-- DROP TABLE public.sub_categories;
+
+CREATE TABLE public.sub_categories ( sub_category_id serial4 NOT NULL, category_id int4 NULL, "name" varchar(100) NOT NULL, CONSTRAINT sub_categories_pkey PRIMARY KEY (sub_category_id), CONSTRAINT sub_categories_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(category_id));
+CREATE INDEX ix_sub_categories_sub_category_id ON public.sub_categories USING btree (sub_category_id);
+
+-- Permissions
+
+ALTER TABLE public.sub_categories OWNER TO postgres;
+GRANT ALL ON TABLE public.sub_categories TO postgres;
+
+
+-- public."user" definition
+
+-- Drop table
+
+-- DROP TABLE public."user";
+
+CREATE TABLE public."user" ( id serial4 NOT NULL, "Email" varchar NOT NULL, "PassWord" varchar NULL, "isActive" bool DEFAULT true NULL, account_type varchar(15) NULL, role_id int4 DEFAULT 2 NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT "user_Email_key" UNIQUE ("Email"), CONSTRAINT user_pkey PRIMARY KEY (id), CONSTRAINT user_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id));
+
+-- Permissions
+
+ALTER TABLE public."user" OWNER TO postgres;
+GRANT ALL ON TABLE public."user" TO postgres;
+
+
+-- public.user_profiles definition
+
+-- Drop table
+
+-- DROP TABLE public.user_profiles;
+
+CREATE TABLE public.user_profiles ( user_id int4 NOT NULL, first_name varchar(100) NULL, last_name varchar(100) NULL, phone_number varchar(20) NULL, avatar_url text NULL, bio text NULL, type_mode varchar(20) NULL, CONSTRAINT user_profiles_pkey PRIMARY KEY (user_id), CONSTRAINT user_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+
+-- Permissions
+
+ALTER TABLE public.user_profiles OWNER TO postgres;
+GRANT ALL ON TABLE public.user_profiles TO postgres;
+
+
+-- public.user_providers definition
+
+-- Drop table
+
+-- DROP TABLE public.user_providers;
+
+CREATE TABLE public.user_providers ( id serial4 NOT NULL, user_id int4 NOT NULL, provider_name varchar NOT NULL, provider_id varchar NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, access_token text NULL, refresh_token text NULL, CONSTRAINT user_providers_pkey PRIMARY KEY (id), CONSTRAINT user_providers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_user_providers_id ON public.user_providers USING btree (id);
+
+-- Permissions
+
+ALTER TABLE public.user_providers OWNER TO postgres;
+GRANT ALL ON TABLE public.user_providers TO postgres;
+
+
+-- public.user_stats definition
+
+-- Drop table
+
+-- DROP TABLE public.user_stats;
+
+CREATE TABLE public.user_stats ( user_id int4 NOT NULL, rating_avg float8 NULL, response_rate float8 NULL, joined_date timestamptz DEFAULT now() NULL, CONSTRAINT user_stats_pkey PRIMARY KEY (user_id), CONSTRAINT user_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+
+-- Permissions
+
+ALTER TABLE public.user_stats OWNER TO postgres;
+GRANT ALL ON TABLE public.user_stats TO postgres;
+
+
+-- public.user_subscriptions definition
+
+-- Drop table
+
+-- DROP TABLE public.user_subscriptions;
+
+CREATE TABLE public.user_subscriptions ( subscription_id serial4 NOT NULL, user_id int4 NULL, package_id int4 NULL, status varchar(50) NULL, is_auto_renew bool NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT user_subscriptions_pkey PRIMARY KEY (subscription_id), CONSTRAINT user_subscriptions_package_id_fkey FOREIGN KEY (package_id) REFERENCES public.service_packages(package_id), CONSTRAINT user_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_user_subscriptions_subscription_id ON public.user_subscriptions USING btree (subscription_id);
+
+-- Permissions
+
+ALTER TABLE public.user_subscriptions OWNER TO postgres;
+GRANT ALL ON TABLE public.user_subscriptions TO postgres;
+
+
+-- public.wallets definition
+
+-- Drop table
+
+-- DROP TABLE public.wallets;
+
+CREATE TABLE public.wallets ( wallet_id serial4 NOT NULL, user_id int4 NULL, currency float8 NULL, CONSTRAINT wallets_pkey PRIMARY KEY (wallet_id), CONSTRAINT wallets_user_id_key UNIQUE (user_id), CONSTRAINT wallets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_wallets_wallet_id ON public.wallets USING btree (wallet_id);
+
+-- Permissions
+
+ALTER TABLE public.wallets OWNER TO postgres;
+GRANT ALL ON TABLE public.wallets TO postgres;
+
+
+-- public."attributes" definition
+
+-- Drop table
+
+-- DROP TABLE public."attributes";
+
+CREATE TABLE public."attributes" ( attribute_id serial4 NOT NULL, "name" varchar(100) NULL, data_type varchar(50) NULL, subcategory_id int4 NOT NULL, CONSTRAINT attributes_pkey PRIMARY KEY (attribute_id), CONSTRAINT attributes_subcategory_id_fkey FOREIGN KEY (subcategory_id) REFERENCES public.sub_categories(sub_category_id));
+CREATE INDEX ix_attributes_attribute_id ON public.attributes USING btree (attribute_id);
+
+-- Permissions
+
+ALTER TABLE public."attributes" OWNER TO postgres;
+GRANT ALL ON TABLE public."attributes" TO postgres;
+
+
+-- public.blacklists definition
+
+-- Drop table
+
+-- DROP TABLE public.blacklists;
+
+CREATE TABLE public.blacklists ( blacklist_id serial4 NOT NULL, admin_id int4 NULL, blocked_value varchar(255) NULL, reason text NULL, CONSTRAINT blacklists_pkey PRIMARY KEY (blacklist_id), CONSTRAINT blacklists_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public."user"(id));
+CREATE INDEX ix_blacklists_blacklist_id ON public.blacklists USING btree (blacklist_id);
+
+-- Permissions
+
+ALTER TABLE public.blacklists OWNER TO postgres;
+GRANT ALL ON TABLE public.blacklists TO postgres;
+
+
+-- public.follows definition
+
+-- Drop table
+
+-- DROP TABLE public.follows;
+
+CREATE TABLE public.follows ( follower_id int4 NOT NULL, followed_id int4 NOT NULL, created_at timestamptz DEFAULT now() NULL, CONSTRAINT follows_pkey PRIMARY KEY (follower_id, followed_id), CONSTRAINT follows_followed_id_fkey FOREIGN KEY (followed_id) REFERENCES public."user"(id), CONSTRAINT follows_follower_id_fkey FOREIGN KEY (follower_id) REFERENCES public."user"(id));
+
+-- Permissions
+
+ALTER TABLE public.follows OWNER TO postgres;
+GRANT ALL ON TABLE public.follows TO postgres;
+
+
+-- public.identity_verification definition
+
+-- Drop table
+
+-- DROP TABLE public.identity_verification;
+
+CREATE TABLE public.identity_verification ( request_id serial4 NOT NULL, user_id int4 NOT NULL, handle_by_id int4 NOT NULL, contact_phone varchar NOT NULL, other_phone varchar NULL, cccd_front_url text NOT NULL, cccd_back_url text NOT NULL, sim_ownership_url text NOT NULL, note varchar NULL, submit_at timestamptz DEFAULT now() NULL, CONSTRAINT identity_verification_pkey PRIMARY KEY (request_id), CONSTRAINT identity_verification_handle_by_id_fkey FOREIGN KEY (handle_by_id) REFERENCES public."user"(id), CONSTRAINT identity_verification_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_identity_verification_request_id ON public.identity_verification USING btree (request_id);
+
+-- Permissions
+
+ALTER TABLE public.identity_verification OWNER TO postgres;
+GRANT ALL ON TABLE public.identity_verification TO postgres;
+
+
+-- public.login_histories definition
+
+-- Drop table
+
+-- DROP TABLE public.login_histories;
+
+CREATE TABLE public.login_histories ( history_id serial4 NOT NULL, user_id int4 NULL, ip_address varchar(50) NULL, device_info text NULL, login_time timestamptz DEFAULT now() NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT login_histories_pkey PRIMARY KEY (history_id), CONSTRAINT login_histories_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_login_histories_history_id ON public.login_histories USING btree (history_id);
+
+-- Permissions
+
+ALTER TABLE public.login_histories OWNER TO postgres;
+GRANT ALL ON TABLE public.login_histories TO postgres;
+
+
+-- public.notifications definition
+
+-- Drop table
+
+-- DROP TABLE public.notifications;
+
+CREATE TABLE public.notifications ( notification_id serial4 NOT NULL, user_id int4 NULL, title varchar(255) NOT NULL, message text NULL, action_link text NULL, is_read bool NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT notifications_pkey PRIMARY KEY (notification_id), CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_notifications_notification_id ON public.notifications USING btree (notification_id);
+
+-- Permissions
+
+ALTER TABLE public.notifications OWNER TO postgres;
+GRANT ALL ON TABLE public.notifications TO postgres;
+
+
+-- public.payment_transactions definition
+
+-- Drop table
+
+-- DROP TABLE public.payment_transactions;
+
+CREATE TABLE public.payment_transactions ( payment_id serial4 NOT NULL, user_id int4 NULL, amount float8 NOT NULL, gateway varchar(50) NULL, gateway_transaction_id varchar(255) NULL, status varchar(50) NULL, raw_response text NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT payment_transactions_pkey PRIMARY KEY (payment_id), CONSTRAINT payment_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_payment_transactions_payment_id ON public.payment_transactions USING btree (payment_id);
+
+-- Permissions
+
+ALTER TABLE public.payment_transactions OWNER TO postgres;
+GRANT ALL ON TABLE public.payment_transactions TO postgres;
+
+
+-- public.products definition
+
+-- Drop table
+
+-- DROP TABLE public.products;
+
+CREATE TABLE public.products ( product_id serial4 NOT NULL, seller_id int4 NULL, sub_category_id int4 NULL, status_id int4 NULL, condition_id int4 NULL, buyer_id int4 NULL, title varchar(255) NOT NULL, price float8 NOT NULL, description text NULL, thumbnails text NULL, deleted_at timestamptz NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT products_pkey PRIMARY KEY (product_id), CONSTRAINT products_buyer_id_fkey FOREIGN KEY (buyer_id) REFERENCES public."user"(id), CONSTRAINT products_condition_id_fkey FOREIGN KEY (condition_id) REFERENCES public.product_condition(condition_id), CONSTRAINT products_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES public."user"(id), CONSTRAINT products_status_id_fkey FOREIGN KEY (status_id) REFERENCES public.product_statuses(status_id), CONSTRAINT products_sub_category_id_fkey FOREIGN KEY (sub_category_id) REFERENCES public.sub_categories(sub_category_id));
+CREATE INDEX ix_products_product_id ON public.products USING btree (product_id);
+
+-- Permissions
+
+ALTER TABLE public.products OWNER TO postgres;
+GRANT ALL ON TABLE public.products TO postgres;
+
+
+-- public.reports definition
+
+-- Drop table
+
+-- DROP TABLE public.reports;
+
+CREATE TABLE public.reports ( report_id serial4 NOT NULL, reporter_id int4 NULL, reason_id int4 NULL, target_type varchar(50) NULL, target_id int4 NULL, status varchar(50) NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT reports_pkey PRIMARY KEY (report_id), CONSTRAINT reports_reason_id_fkey FOREIGN KEY (reason_id) REFERENCES public.report_reason(reason_id), CONSTRAINT reports_reporter_id_fkey FOREIGN KEY (reporter_id) REFERENCES public."user"(id));
+CREATE INDEX ix_reports_report_id ON public.reports USING btree (report_id);
+
+-- Permissions
+
+ALTER TABLE public.reports OWNER TO postgres;
+GRANT ALL ON TABLE public.reports TO postgres;
+
+
+-- public.review_product_conversations definition
+
+-- Drop table
+
+-- DROP TABLE public.review_product_conversations;
+
+CREATE TABLE public.review_product_conversations ( product_id int4 NOT NULL, reviewer_id int4 NOT NULL, reviewee_id int4 NOT NULL, rating int4 NOT NULL, "content" text NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT review_product_conversations_pkey PRIMARY KEY (product_id, reviewer_id, reviewee_id), CONSTRAINT review_product_conversations_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id), CONSTRAINT review_product_conversations_reviewee_id_fkey FOREIGN KEY (reviewee_id) REFERENCES public."user"(id), CONSTRAINT review_product_conversations_reviewer_id_fkey FOREIGN KEY (reviewer_id) REFERENCES public."user"(id));
+
+-- Permissions
+
+ALTER TABLE public.review_product_conversations OWNER TO postgres;
+GRANT ALL ON TABLE public.review_product_conversations TO postgres;
+
+
+-- public.saved_searches definition
+
+-- Drop table
+
+-- DROP TABLE public.saved_searches;
+
+CREATE TABLE public.saved_searches ( search_id serial4 NOT NULL, user_id int4 NULL, keyword varchar(255) NULL, filter_criteria json NULL, CONSTRAINT saved_searches_pkey PRIMARY KEY (search_id), CONSTRAINT saved_searches_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_saved_searches_search_id ON public.saved_searches USING btree (search_id);
+
+-- Permissions
+
+ALTER TABLE public.saved_searches OWNER TO postgres;
+GRANT ALL ON TABLE public.saved_searches TO postgres;
+
+
+-- public.student_verifications definition
+
+-- Drop table
+
+-- DROP TABLE public.student_verifications;
+
+CREATE TABLE public.student_verifications ( user_id int4 NOT NULL, edu_email varchar(255) NULL, student_card_img text NULL, status varchar(50) NULL, submitted_at timestamptz DEFAULT now() NULL, CONSTRAINT student_verifications_pkey PRIMARY KEY (user_id), CONSTRAINT student_verifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+
+-- Permissions
+
+ALTER TABLE public.student_verifications OWNER TO postgres;
+GRANT ALL ON TABLE public.student_verifications TO postgres;
+
+
+-- public.system_logs definition
+
+-- Drop table
+
+-- DROP TABLE public.system_logs;
+
+CREATE TABLE public.system_logs ( log_id serial4 NOT NULL, admin_id int4 NULL, "action" varchar(100) NULL, target_table varchar(100) NULL, "timestamp" timestamptz DEFAULT now() NULL, CONSTRAINT system_logs_pkey PRIMARY KEY (log_id), CONSTRAINT system_logs_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public."user"(id));
+CREATE INDEX ix_system_logs_log_id ON public.system_logs USING btree (log_id);
+
+-- Permissions
+
+ALTER TABLE public.system_logs OWNER TO postgres;
+GRANT ALL ON TABLE public.system_logs TO postgres;
+
+
+-- public.wallet_histories definition
+
+-- Drop table
+
+-- DROP TABLE public.wallet_histories;
+
+CREATE TABLE public.wallet_histories ( history_id serial4 NOT NULL, wallet_id int4 NULL, amount float8 NOT NULL, transaction_type varchar(50) NULL, status varchar(50) NULL, description text NULL, payment_id int4 NULL, subscription_id int4 NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT wallet_histories_pkey PRIMARY KEY (history_id), CONSTRAINT wallet_histories_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payment_transactions(payment_id), CONSTRAINT wallet_histories_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.user_subscriptions(subscription_id), CONSTRAINT wallet_histories_wallet_id_fkey FOREIGN KEY (wallet_id) REFERENCES public.wallets(wallet_id));
+CREATE INDEX ix_wallet_histories_history_id ON public.wallet_histories USING btree (history_id);
+
+-- Permissions
+
+ALTER TABLE public.wallet_histories OWNER TO postgres;
+GRANT ALL ON TABLE public.wallet_histories TO postgres;
+
+
+-- public.addresses definition
+
+-- Drop table
+
+-- DROP TABLE public.addresses;
+
+CREATE TABLE public.addresses ( address_id serial4 NOT NULL, user_id int4 NULL, product_id int4 NULL, ward_id int4 NULL, specific_name varchar(255) NOT NULL, "type" varchar(50) NOT NULL, is_default bool DEFAULT true NULL, CONSTRAINT addresses_pkey PRIMARY KEY (address_id), CONSTRAINT addresses_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id), CONSTRAINT addresses_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id), CONSTRAINT addresses_ward_id_fkey FOREIGN KEY (ward_id) REFERENCES public.master_wards(ward_id));
+CREATE INDEX ix_addresses_address_id ON public.addresses USING btree (address_id);
+
+-- Permissions
+
+ALTER TABLE public.addresses OWNER TO postgres;
+GRANT ALL ON TABLE public.addresses TO postgres;
+
+
+-- public.attribute_options definition
+
+-- Drop table
+
+-- DROP TABLE public.attribute_options;
+
+CREATE TABLE public.attribute_options ( option_id serial4 NOT NULL, attribute_id int4 NULL, option_value varchar(100) NULL, CONSTRAINT attribute_options_pkey PRIMARY KEY (option_id), CONSTRAINT attribute_options_attribute_id_fkey FOREIGN KEY (attribute_id) REFERENCES public."attributes"(attribute_id));
+CREATE INDEX ix_attribute_options_option_id ON public.attribute_options USING btree (option_id);
+
+-- Permissions
+
+ALTER TABLE public.attribute_options OWNER TO postgres;
+GRANT ALL ON TABLE public.attribute_options TO postgres;
+
+
+-- public."comments" definition
+
+-- Drop table
+
+-- DROP TABLE public."comments";
+
+CREATE TABLE public."comments" ( comment_id serial4 NOT NULL, product_id int4 NULL, user_id int4 NULL, "content" text NOT NULL, parent_id int4 NULL, "CreatedAt" timestamptz DEFAULT now() NOT NULL, "UpdateAt" timestamptz DEFAULT now() NOT NULL, CONSTRAINT comments_pkey PRIMARY KEY (comment_id), CONSTRAINT comments_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public."comments"(comment_id), CONSTRAINT comments_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id), CONSTRAINT comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_comments_comment_id ON public.comments USING btree (comment_id);
+
+-- Permissions
+
+ALTER TABLE public."comments" OWNER TO postgres;
+GRANT ALL ON TABLE public."comments" TO postgres;
+
+
+-- public.conversations definition
+
+-- Drop table
+
+-- DROP TABLE public.conversations;
+
+CREATE TABLE public.conversations ( conversation_id serial4 NOT NULL, product_id int4 NULL, last_message_at timestamptz NULL, CONSTRAINT conversations_pkey PRIMARY KEY (conversation_id), CONSTRAINT conversations_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id));
+CREATE INDEX ix_conversations_conversation_id ON public.conversations USING btree (conversation_id);
+
+-- Permissions
+
+ALTER TABLE public.conversations OWNER TO postgres;
+GRANT ALL ON TABLE public.conversations TO postgres;
+
+
+-- public.favorites definition
+
+-- Drop table
+
+-- DROP TABLE public.favorites;
+
+CREATE TABLE public.favorites ( user_id int4 NOT NULL, product_id int4 NOT NULL, created_at timestamptz DEFAULT now() NULL, CONSTRAINT favorites_pkey PRIMARY KEY (user_id, product_id), CONSTRAINT favorites_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id), CONSTRAINT favorites_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+
+-- Permissions
+
+ALTER TABLE public.favorites OWNER TO postgres;
+GRANT ALL ON TABLE public.favorites TO postgres;
+
+
+-- public.messages definition
+
+-- Drop table
+
+-- DROP TABLE public.messages;
+
+CREATE TABLE public.messages ( message_id serial4 NOT NULL, conversation_id int4 NULL, sender_id int4 NULL, "content" text NOT NULL, is_read bool NULL, sent_at timestamptz DEFAULT now() NULL, CONSTRAINT messages_pkey PRIMARY KEY (message_id), CONSTRAINT messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(conversation_id), CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public."user"(id));
+CREATE INDEX ix_messages_message_id ON public.messages USING btree (message_id);
+
+-- Permissions
+
+ALTER TABLE public.messages OWNER TO postgres;
+GRANT ALL ON TABLE public.messages TO postgres;
+
+
+-- public.product_attributes definition
+
+-- Drop table
+
+-- DROP TABLE public.product_attributes;
+
+CREATE TABLE public.product_attributes ( id serial4 NOT NULL, product_id int4 NULL, attribute_id int4 NULL, "Value_Text" varchar NULL, "Value_Num" varchar NOT NULL, CONSTRAINT product_attributes_pkey PRIMARY KEY (id), CONSTRAINT product_attributes_attribute_id_fkey FOREIGN KEY (attribute_id) REFERENCES public."attributes"(attribute_id), CONSTRAINT product_attributes_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id));
+CREATE INDEX ix_product_attributes_id ON public.product_attributes USING btree (id);
+
+-- Permissions
+
+ALTER TABLE public.product_attributes OWNER TO postgres;
+GRANT ALL ON TABLE public.product_attributes TO postgres;
+
+
+-- public.product_images definition
+
+-- Drop table
+
+-- DROP TABLE public.product_images;
+
+CREATE TABLE public.product_images ( image_id serial4 NOT NULL, product_id int4 NULL, image_url text NOT NULL, display_order int4 NULL, is_thumbnail bool NULL, CONSTRAINT product_images_pkey PRIMARY KEY (image_id), CONSTRAINT product_images_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id));
+CREATE INDEX ix_product_images_image_id ON public.product_images USING btree (image_id);
+
+-- Permissions
+
+ALTER TABLE public.product_images OWNER TO postgres;
+GRANT ALL ON TABLE public.product_images TO postgres;
+
+
+-- public.product_views definition
+
+-- Drop table
+
+-- DROP TABLE public.product_views;
+
+CREATE TABLE public.product_views ( view_id serial4 NOT NULL, product_id int4 NULL, user_id int4 NULL, viewed_at timestamptz DEFAULT now() NULL, CONSTRAINT product_views_pkey PRIMARY KEY (view_id), CONSTRAINT product_views_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id), CONSTRAINT product_views_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id));
+CREATE INDEX ix_product_views_view_id ON public.product_views USING btree (view_id);
+
+-- Permissions
+
+ALTER TABLE public.product_views OWNER TO postgres;
+GRANT ALL ON TABLE public.product_views TO postgres;
+
+
+-- public."Participation" definition
+
+-- Drop table
+
+-- DROP TABLE public."Participation";
+
+CREATE TABLE public."Participation" ( buyer_id int4 NOT NULL, seller_id int4 NOT NULL, conversation_id int4 NOT NULL, CONSTRAINT "Participation_pkey" PRIMARY KEY (buyer_id, seller_id, conversation_id), CONSTRAINT "Participation_buyer_id_fkey" FOREIGN KEY (buyer_id) REFERENCES public."user"(id), CONSTRAINT "Participation_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES public.conversations(conversation_id), CONSTRAINT "Participation_seller_id_fkey" FOREIGN KEY (seller_id) REFERENCES public."user"(id));
+CREATE INDEX "ix_Participation_buyer_id" ON public."Participation" USING btree (buyer_id);
+CREATE INDEX "ix_Participation_conversation_id" ON public."Participation" USING btree (conversation_id);
+CREATE INDEX "ix_Participation_seller_id" ON public."Participation" USING btree (seller_id);
+
+-- Permissions
+
+ALTER TABLE public."Participation" OWNER TO postgres;
+GRANT ALL ON TABLE public."Participation" TO postgres;
+
+
+-- public.message_attachments definition
+
+-- Drop table
+
+-- DROP TABLE public.message_attachments;
+
+CREATE TABLE public.message_attachments ( attachment_id serial4 NOT NULL, message_id int4 NULL, file_url text NOT NULL, file_type varchar(50) NULL, CONSTRAINT message_attachments_pkey PRIMARY KEY (attachment_id), CONSTRAINT message_attachments_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(message_id));
+CREATE INDEX ix_message_attachments_attachment_id ON public.message_attachments USING btree (attachment_id);
+
+-- Permissions
+
+ALTER TABLE public.message_attachments OWNER TO postgres;
+GRANT ALL ON TABLE public.message_attachments TO postgres;
+
+
+
+
+-- Permissions
+
+GRANT ALL ON SCHEMA public TO pg_database_owner;
+GRANT USAGE ON SCHEMA public TO public;

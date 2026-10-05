@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from src.modules import User, TokenData, Token, Register, User_Update, User_Providers, userProfile, UserProfileUpdate
+from src.modules import User, TokenData, Token, Register, User_Update, User_Providers, userProfile, UserProfileUpdate, Address, AddressCreate
 from src.share.uilts import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, timedelta, jwt
 from src.Core.security import get_password_hashed, verify_password
 from sqlalchemy import select
@@ -116,4 +116,44 @@ def update_profile (user_id: int, form: UserProfileUpdate , db: Session):
     db.commit()
     db.refresh(profile)
     return profile
-    
+
+def get_user_address (user_id: int, db: Session):
+    stmt = select(Address).where(Address.user_id==user_id).order_by(Address.is_default.desc(), Address.address_id.desc())
+    return db.scalars(stmt).all()
+
+def add_user_address (user_id: int, form: AddressCreate, db: Session):
+    if form.is_default:
+        old_address = db.scalars(select(Address).where(Address.user_id==user_id)).all()
+        for i in old_address:
+            i.is_default=False
+    new_address = Address(user_id=user_id, **form.model_dump())
+    db.add(new_address)
+    db.commit()
+    db.refresh(new_address)
+    return new_address
+def update_address (user_id: int, address_id: int, form: AddressCreate, db: Session):
+    stmt = select(Address).where(Address.user_id==user_id,Address.address_id==address_id)
+    address= db.scalars(stmt).first()
+    if not address:
+        raise (
+            HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                          detail=f"Khong tim thay address cua {user_id}")
+        )
+    for field, value in form.model_dump().items():
+        setattr(address,field,value)
+    db.add(address)
+    db.commit()
+    db.refresh(address)
+    return address
+
+def delete_user_address (address_id: int, user_id: int, db: Session):
+    stmt = select(Address).where(Address.address_id == address_id, Address.user_id == user_id)
+    addr = db.scalars(stmt).first()
+    if not addr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy địa chỉ hoặc bạn không có quyền xóa địa chỉ này"
+        )
+    db.delete(addr)
+    db.commit()
+    return {"message": "Đã xóa địa chỉ thành công"}

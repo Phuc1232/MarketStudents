@@ -8,7 +8,7 @@ from .service import  get_all_provinces, get_districts_by_province, get_wards_by
 
 router = APIRouter(
     prefix="/masterdata",
-    tags=["MasterData&Categories"]
+    tags=["MasterData"]
 )
 
 @router.get("/provinces", response_model=List[ProvinceResponse], status_code=status.HTTP_200_OK)
