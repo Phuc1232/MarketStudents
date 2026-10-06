@@ -1,14 +1,18 @@
 from fastapi import Depends, HTTPException, status
-from src.modules import User, TokenData, Token, Register, User_Update, User_Providers, userProfile, UserProfileUpdate, Address, AddressCreate
-from src.share.uilts import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, timedelta, jwt
+from src.modules import (User, TokenData, Token, Register, User_Update, 
+                         User_Providers, userProfile, UserProfileUpdate,
+                         Address, AddressCreate,
+                         StudentVerification)
+from src.share.uilts import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, timedelta, jwt, datetime, timezone
 from src.Core.security import get_password_hashed, verify_password
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from src.api.deps import get_db
 from fastapi.security import OAuth2PasswordBearer
 from typing import Annotated
-#from datetime import timedelta
-#from ...Core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+import random
+import re
+from datetime import timedelta
 import jwt
 oauth_schemas=OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -157,3 +161,46 @@ def delete_user_address (address_id: int, user_id: int, db: Session):
     db.delete(addr)
     db.commit()
     return {"message": "Đã xóa địa chỉ thành công"}
+# In-memory OTP storage: { "edu_email": {"otp": "123456", "user_id": 1, "expires_at": datetime} }
+OTP_CACHE ={}
+def request_student_otp (user_id: int, edu_email: str, db: Session):
+    # check the user's email has "edu"?
+    
+    email_clean = edu_email.strip().lower()
+    if not (email_clean.endswith("edu.vn")):
+        raise (
+            HTTPException(
+                status_code= status.HTTP_401_UNAUTHORIZED, detail=f"Email không hợp lệ! Vui lòng sử dụng email chính thức của trường đại học kết thúc bằng đuôi '.edu.vn'"
+            )
+        )
+    # check the email verifed 
+    stmt = select(StudentVerification).where(StudentVerification.edu_email==email_clean,
+                                             StudentVerification.status == "Verified")
+    exsiting = db.scalars(stmt).first()
+    if  exsiting and exsiting.user_id !=user_id:
+        raise (
+            HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email sinh viên này đã được liên kết và xác minh bởi một tài khoản khác trên UniMarket!"
+            )
+        )
+    otp = f"{random.randint(100000,999999)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    OTP_CACHE[edu_email]={
+        "otp": otp,
+        "user_id": user_id,
+        "expires_at": expires_at
+    }
+    #In mã OTP ra Console phục vụ kiểm thử môi trường dev
+    print("\n" + "="*60)
+    print(f"[UNIMARKET OTP SERVICE] GỬI MÃ XÁC THỰC SINH VIÊN")
+    print(f"-> Gửi tới Email: {email_clean}")
+    print(f"-> Mã OTP (6 số): {otp}")
+    print(f"-> Thời hạn     : 5 phút (hết hạn lúc {expires_at.strftime('%H:%M:%S')})")
+    print("="*60 + "\n")
+
+    return {
+        "message": "Mã OTP đã được gửi thành công đến email trường của bạn. Vui lòng kiểm tra hộp thư!",
+        "edu_email": email_clean
+    }

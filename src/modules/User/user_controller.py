@@ -7,7 +7,7 @@ from typing import Annotated
 from .service import (get_current_user, get_all_user, get_user, delete_user_for_user, 
 update_pass_user_for_user, 
 get_profile,update_profile, 
-get_user_address, get_user_address,add_user_address, update_address, delete_user_address) 
+get_user_address, get_user_address,add_user_address, update_address, delete_user_address, request_student_otp) 
 
 router=APIRouter(
     prefix="/user",
@@ -62,15 +62,15 @@ def remove_address(
 ):
     return delete_user_address(address_id, user.id, db)
 
-@router.post("/verify-student/request-otp", response_model=[], status_code=[])
-def create_otp ():
-    return
+@router.post("/verify-student/request-otp", status_code=status.HTTP_200_OK)
+def create_otp (edu_email: str,user: User= Depends(get_current_user), db: Session= Depends(get_db)):
+    return request_student_otp(user.id,edu_email,db)
 
-@router.post("/verify-student/confirm-otp", response_model=[], status_code=[])
+@router.post("/verify-student/confirm-otp", status_code=status.HTTP_200_OK)
 def confirm_otp():
     return
 
-@router.post("verify-student/upload-card", response_model=[], status_code=[])
+@router.post("verify-student/upload-card",status_code=status.HTTP_200_OK)
 def confirm_student_card():
     return
 

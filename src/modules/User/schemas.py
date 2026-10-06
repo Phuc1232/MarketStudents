@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import Optional
-
+from datetime import datetime
 class User_Update(BaseModel):
     current_password: str
     new_password: str
@@ -42,3 +42,33 @@ class AddressResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+class StudentOtpRequest(BaseModel):
+    edu_email: EmailStr = Field(
+        ..., 
+        description="Email trường đại học kết thúc bằng đuôi .edu.vn (vd: sv@ut.edu.vn)"
+    )
+
+class StudentOtpConfirm(BaseModel):
+    edu_email: EmailStr = Field(..., description="Email trường đã nhận mã OTP")
+    otp_code: str = Field(
+        ..., 
+        min_length=6, 
+        max_length=6, 
+        description="Mã OTP gồm 6 chữ số"
+    )
+
+class StudentCardUpload(BaseModel):
+    student_card_img: str = Field(
+        ..., 
+        description="Link ảnh chụp thẻ sinh viên (luồng dự phòng khi trường không có email)"
+    )
+
+class StudentVerificationResponse(BaseModel):
+    user_id: int
+    edu_email: Optional[str] = None
+    student_card_img: Optional[str] = None
+    status: str
+    submitted_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
