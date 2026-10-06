@@ -177,17 +177,17 @@ def request_student_otp (user_id: int, edu_email: str, db: Session):
     stmt = select(StudentVerification).where(StudentVerification.edu_email==email_clean,
                                              StudentVerification.status == "Verified")
     exsiting = db.scalars(stmt).first()
-    if  exsiting and exsiting.user_id !=user_id:
+    if  exsiting or exsiting.user_id !=user_id:
         raise (
             HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email sinh viên này đã được liên kết và xác minh bởi một tài khoản khác trên UniMarket!"
+                detail="Email sinh viên này đã được liên kết hoặc xác minh bởi một tài khoản khác trên UniMarket!"
             )
         )
     otp = f"{random.randint(100000,999999)}"
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-    OTP_CACHE[edu_email]={
+    OTP_CACHE[email_clean]={
         "otp": otp,
         "user_id": user_id,
         "expires_at": expires_at
@@ -204,3 +204,47 @@ def request_student_otp (user_id: int, edu_email: str, db: Session):
         "message": "Mã OTP đã được gửi thành công đến email trường của bạn. Vui lòng kiểm tra hộp thư!",
         "edu_email": email_clean
     }
+
+def confirm_student_otp (user_id: int, edu_email: str, otp_code: int, db: Session):
+    email_clean = edu_email.strip().lower()
+    cache =OTP_CACHE.get(email_clean)
+    if not cache or cache["user_id"]!=user_id:
+        raise (
+            HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy yêu cầu xác thực cho email này hoặc bạn chưa gửi yêu cầu lấy mã OTP!"
+            )
+        )
+    if datetime.now(timezone.utc) > cache ["expires_at"]:
+        OTP_CACHE.pop(email_clean,None)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã OTP đã hết hạn (quá 5 phút). Vui lòng yêu cầu cấp mã mới!"
+        )
+    if cache["otp"] != otp_code.strip():
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã OTP không chính xác. Vui lòng kiểm tra lại!"
+        )
+    stmt = select (StudentVerification).where(StudentVerification.user_id==user_id)
+    verfication = db.scalars(stmt).first()
+    if not verfication:
+        verfication = StudentVerification(
+            user_id=user_id,
+            status="Verified",
+            edu_email = email_clean
+        )
+        db.add(verfication)
+    else:
+        verfication.edu_email=email_clean
+        verfication.status="Verified"
+        verfication.submitted_at=datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(verfication)
+
+    user= db.get (User,user_id)
+    if user:
+        user.account_type="Student"
+        user.role_id=3
+    OTP_CACHE.pop(email_clean,None)
+    return verfication
