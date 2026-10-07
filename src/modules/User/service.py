@@ -43,14 +43,24 @@ def get_all_user(role_id: int, db: Session= Depends(get_db)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found")
     return user
 
-def delete_user_for_user(user_id: int, db: Session=Depends(get_db)):
+def delete_user_for_user(user_id: int, db: Session):
     # stmt=select(User).where(User.id==user_id)
     # user=db.scalars(stmt).first()
     user=db.get(User, user_id)
     if not user:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Loi!!!!")
-    db.delete(user)
+    user.isActive = False
     db.commit()
+def delete_user_by_admin (user_id: int, role_id: int, db: Session):
+    if (role_id ==1 ):
+        user=db.get(User,user_id)
+        if not user: 
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="NOT FOUND!!!")
+        user.isActive = False
+        db.commit()
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ONLY ADMIN!!!")
+    return {"message": "Vo Hieu Tai Khoan Thanh Cong!!!!"}
 
 def update_pass_user_for_user(from_update: User_Update, user_id: int , db: Session= Depends(get_db)):
     user=db.get(User, user_id)
@@ -88,7 +98,7 @@ def get_current_user(token:  Annotated[str, Depends(oauth_schemas)], db: Session
 
 def authenticate_user(username: str, password: str ,db: Session= Depends(get_db)):
     dummy_password=get_password_hashed("thienphucne")
-    stmt=select(User).where(username==User.Email)
+    stmt=select(User).where(username==User.Email, User.isActive == True)
     user=db.scalars(stmt).first()
     if not user:
         verify_password(password,dummy_password)
@@ -177,11 +187,11 @@ def request_student_otp (user_id: int, edu_email: str, db: Session):
     stmt = select(StudentVerification).where(StudentVerification.edu_email==email_clean,
                                              StudentVerification.status == "Verified")
     exsiting = db.scalars(stmt).first()
-    if  exsiting or exsiting.user_id !=user_id:
+    if  exsiting and exsiting.user_id != user_id:
         raise (
             HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email sinh viên này đã được liên kết hoặc xác minh bởi một tài khoản khác trên UniMarket!"
+                detail="Email sinh viên này đã được liên kết và xác minh bởi một tài khoản khác trên UniMarket!"
             )
         )
     otp = f"{random.randint(100000,999999)}"
@@ -244,7 +254,26 @@ def confirm_student_otp (user_id: int, edu_email: str, otp_code: int, db: Sessio
 
     user= db.get (User,user_id)
     if user:
-        user.account_type="Student"
+        user.account_type="Sinh Vien"
         user.role_id=3
+    db.commit()
     OTP_CACHE.pop(email_clean,None)
+    return verfication
+
+def upload_student_card (user_id: int, card_image_url: str, db: Session):
+    stmt = select(StudentVerification).where (StudentVerification.user_id==user_id)
+    verfication = db.scalars(stmt).first()
+    if not verfication:
+        verfication= StudentVerification(
+            user_id=user_id,
+            status="Pending",
+            student_card_image = card_image_url
+        )
+        db.add(verfication)
+    else:
+        verfication.student_card_img = card_image_url
+        verfication.status = "Pending"
+        verfication.submitted_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(verfication)
     return verfication

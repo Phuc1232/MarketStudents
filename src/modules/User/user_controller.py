@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
 from src.modules import (Register, Token, User, Register_response, 
                          User_Update, UserProfileUpdate, UserProfileResponse,
                          AddressResponse, AddressCreate, 
-                         MessageResponse, StudentOtpRequest, StudentOtpConfirm, StudentVerificationResponse)
+                         MessageResponse, StudentOtpRequest, StudentOtpConfirm, StudentVerificationResponse, StudentCardUpload)
 from sqlalchemy.orm import Session
 from ...api.deps import get_db
 from typing import Annotated
@@ -10,7 +10,7 @@ from .service import (get_current_user, get_all_user, get_user, delete_user_for_
 update_pass_user_for_user, 
 get_profile,update_profile, 
 get_user_address, get_user_address,add_user_address, update_address, delete_user_address, 
-request_student_otp,confirm_student_otp) 
+request_student_otp,confirm_student_otp, upload_student_card, delete_user_by_admin) 
 
 router=APIRouter(
     prefix="/user",
@@ -34,6 +34,9 @@ def get_user_id(id :int, db: Session= Depends(get_db)):
 def del_user(user: User =Depends(get_current_user), db:Session =Depends(get_db)):
     return delete_user_for_user(user.id,db)
 
+@router.delete("/{user_id}",status_code=status.HTTP_200_OK)
+def delete_user_admin (user_id: int, user: User= Depends(get_current_user), db: Session = Depends(get_db)):
+    return delete_user_by_admin(user_id,user.role_id,db)
 @router.put("/password/me", status_code=status.HTTP_200_OK)
 def update_pass_user(form_update: User_Update ,user: User=Depends(get_current_user), db: Session= Depends(get_db)):
     return update_pass_user_for_user(form_update,user.id,db)
@@ -73,7 +76,7 @@ def create_otp (body: StudentOtpRequest ,user: User= Depends(get_current_user), 
 def confirm_otp(body: StudentOtpConfirm, user: User= Depends(get_current_user), db: Session= Depends(get_db)):
     return confirm_student_otp(user.id,body.edu_email,body.otp_code,db)
 
-@router.post("verify-student/upload-card",status_code=status.HTTP_200_OK)
-def confirm_student_card():
-    return
+@router.post("verify-student/upload-card",response_model=StudentVerificationResponse, status_code=status.HTTP_200_OK)
+def confirm_student_card(body: StudentCardUpload, user: User= Depends(get_current_user) ,db: Session= Depends(get_db)):
+    return upload_student_card(user.id, body.student_card_img,db)
 
