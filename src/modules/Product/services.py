@@ -91,5 +91,68 @@ def get_product_by_id (product_id: int, user_id: int, db: Session):
 
     return product
 
-    
+def search_products (
+    keyword: Optional[str] = None,
+    category_id: Optional[int] = None,
+    sub_category_id: Optional[int] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    condition_id: Optional[int] = None,
+    province_id: Optional[int] = None,
+    district_id: Optional[int] = None,
+    status_id: Optional[int] = 2,  # Mặc định chỉ lấy tin đang Active
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = None      
+    ):
+    # tim kiem tren toan van
+    query = select(Product).where(Product.deleted_at == None)
+    # ket hop them trang thai san pham (neu co)
+    if status_id is not None:
+        query = query.where(Product.status_id == status_id)
+    # ket hop tim kiem theo tu khoa 
+    if keyword is not None:
+        kw_pattern = f"%{keyword.strip()}%"
+        query = query.where (
+            or_(
+                Product.title.ilike(kw_pattern),
+                Product.description.ilike(kw_pattern)
+            )
+        )
+    # ket hop loc theo khoang gia (neu co)
+    if min_price is not None:
+        query = query.where(Product.price >= min_price)
+    if max_price is not None:
+        query = query.where(Product.price <= max_price)
+    # ket hop loc theo danh muc (neu co)
+    if sub_category_id is not None:
+        query = query.where(Product.sub_category_id == sub_category_id)
+    elif category_id is not None:
+        query = query.join(SubCategory, Product.sub_category_id == SubCategory.sub_category_id)\
+                        .where (SubCategory.category_id == category_id)
+    # ket hop loc theo tinh trang san pham (neu co)
+    if condition_id is not None:
+        query = query.where(Product.condition_id == condition_id)
+    # ket hop loc theo dia gioi (neu co)
+    if province_id is not None or district_id is not None:
+        query = query.join(Address, Address.product_id == Product.product_id)\
+                    .join(MasterWard, Address.ward_id == MasterWard.ward_id)
+        if district_id is not None:
+            query = query.where(MasterWard.district_id == district_id)
+        if province_id is not None:
+            query = query.join(MasterDistrict, MasterWard.district_id == MasterDistrict.district_id)\
+                            .where(MasterDistrict.province_id == province_id)
+    # dem ket qua tra ve
+    stmt = select(func.count()).select_from(query.subquery())
+    total = db.scalar(stmt) or 0
+    # phan trang
+    offset = (page-1)*page_size
+    query = query.order_by(Product.CreatedAt.desc()).offset(offset).limit(page_size)
+    items = db.scalars(query).all()
 
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": items
+    }
