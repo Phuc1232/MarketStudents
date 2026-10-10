@@ -179,4 +179,45 @@ def update_my_product (product_id: int, user_id: int, form: ProductUpdate, db: S
     db.commit()
     db.refresh(product)
     return get_product_by_id(product.product_id,user_id,db)
+
+def mark_product_as_sold (product_id: int, user_id: int, buyer_id: Optional[int], db: Session):
+    product = db.get(Product,product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy sản phẩm")
+    if (product.seller_id != user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền thay đổi trạng thái của tin đăng này!"
+        )
+    product.status_id = 3
+    if buyer_id:
+        product.buyer_id = buyer_id
+    db.commit()
+    return {
+        "message": "Đã cập nhật trạng thái tin đăng thành 'ĐÃ BÁN'. Tin đã được ẩn khỏi danh sách tìm kiếm chung.",
+        "product_id": product_id,
+        "status": "Sold"
+    }
+
+def soft_delete_product(product_id: int, user_id: int, db: Session):
+    """
+    Xóa mềm tin đăng (lưu thùng rác trong vòng 30 ngày) -> AC-12, BR-7.
+    """
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy sản phẩm"
+        )
+
+    if product.seller_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền xóa tin đăng của người khác!"
+        )
+
+    product.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Đã xóa tin đăng thành công (tin được lưu trong thùng rác 30 ngày)."}
+    
  

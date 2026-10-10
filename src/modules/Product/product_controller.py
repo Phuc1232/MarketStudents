@@ -6,7 +6,9 @@ from src.modules.User.service import get_current_user
 from src.modules import(User, ProductCreate, ProductUpdate, ProductDetailResponse,
     ProductListItemResponse, PaginatedProductsResponse)
 from .services import (
-    get_product_by_id, create_new_product, search_products, get_my_product, update_my_product
+    get_product_by_id, create_new_product, search_products, 
+    get_my_product, update_my_product, mark_product_as_sold,
+    get_product_by_id, soft_delete_product
 )
 
 
@@ -53,6 +55,25 @@ def list_products(
 def get_product (user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return get_my_product(user.id,db)
 
+@router.get("/{product_id}", response_model= ProductListItemResponse, status_code=status.HTTP_200_OK)
+def get_this_product (product_id: int, viewer_id: int = None, db: Session = Depends(get_db)):
+    return get_product_by_id(product_id,viewer_id,db)
+
 @router.put("/{product_id}/me", response_model= ProductListItemResponse, status_code=status.HTTP_200_OK)
 def update_product (product_id: int, form: ProductUpdate,  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return update_my_product(product_id, user.id,form,db)
+
+@router.patch("/{product_id}/sold", status_code = status.HTTP_200_OK)
+def sold_product (product_id: int, buyer_id: Optional[int] = Query(None, description="ID người mua nếu có"), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return mark_product_as_sold(product_id,user.id,buyer_id,db)
+
+@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+def remove_product(
+    product_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Xóa mềm tin đăng (lưu trữ trong thùng rác 30 ngày trước khi dọn dẹp vĩnh viễn).
+    """
+    return soft_delete_product(product_id, user.id, db)
