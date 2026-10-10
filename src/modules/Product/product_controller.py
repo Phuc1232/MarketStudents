@@ -6,7 +6,7 @@ from src.modules.User.service import get_current_user
 from src.modules import(User, ProductCreate, ProductUpdate, ProductDetailResponse,
     ProductListItemResponse, PaginatedProductsResponse)
 from .services import (
-    get_product_by_id, create_new_product, search_products
+    get_product_by_id, create_new_product, search_products, get_my_product, update_my_product
 )
 
 
@@ -48,3 +48,11 @@ def list_products(
         page_size=page_size,
         db=db
     )
+
+@router.get ("/me", response_model= List[ProductListItemResponse], status_code = status.HTTP_200_OK)
+def get_product (user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return get_my_product(user.id,db)
+
+@router.put("/{product_id}/me", response_model= ProductListItemResponse, status_code=status.HTTP_200_OK)
+def update_product (product_id: int, form: ProductUpdate,  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return update_my_product(product_id, user.id,form,db)

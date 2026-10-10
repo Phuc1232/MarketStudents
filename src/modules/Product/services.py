@@ -156,3 +156,27 @@ def search_products (
         "page_size": page_size,
         "items": items
     }
+
+def get_my_product (user_id: int, db: Session):
+    stmt = select(Product).where(Product.seller_id == user_id, Product.deleted_at == None)\
+                        .order_by(Product.CreatedAt.desc())
+    return db.scalars(stmt).all()
+
+def update_my_product (product_id: int, user_id: int, form: ProductUpdate, db: Session):
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy sản phẩm"
+        )
+    if product.seller_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền chỉnh sửa tin đăng của người khác!"
+        )
+    for field, value in form.model_dump(exclude_unset=True).items():
+        setattr(product,field,value)
+    db.commit()
+    db.refresh(product)
+    return get_product_by_id(product.product_id,user_id,db)
+ 
