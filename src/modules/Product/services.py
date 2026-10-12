@@ -7,6 +7,8 @@ from src.modules import  (Product, ProductImage, ProductAttribute, ProductStatus
                             ProductCondition, ProductView, SubCategory, Category,
                             User, Address, MasterDistrict, MasterWard, ProductCreate, ProductUpdate)
 
+def get_all_product (db: Session):
+    return db.scalars(select(Product)).all()
 
 def create_new_product (user_id: int, form: ProductCreate ,db: Session):
     subcat= db.get(SubCategory, form.sub_category_id)

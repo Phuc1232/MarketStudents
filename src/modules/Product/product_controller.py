@@ -8,7 +8,7 @@ from src.modules import(User, ProductCreate, ProductUpdate, ProductDetailRespons
 from .services import (
     get_product_by_id, create_new_product, search_products, 
     get_my_product, update_my_product, mark_product_as_sold,
-    get_product_by_id, soft_delete_product
+    get_product_by_id, soft_delete_product, get_all_product
 )
 
 
@@ -16,6 +16,9 @@ router = APIRouter(
     prefix="/product",
     tags=["Product"]
 )
+@router.get("/all", response_model=List[ProductDetailResponse], status_code = status.HTTP_200_OK)
+def get_all(db: Session = Depends(get_db)):
+    return get_all_product(db)
 @router.post("", response_model= ProductDetailResponse, status_code=status.HTTP_200_OK)
 def post_product (form: ProductCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return create_new_product(user.id, form,db)
