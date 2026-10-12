@@ -11,7 +11,8 @@ from src.modules import (
 
 )
 from src.modules.Interaction.services import (
-    toggle_favorite_product
+    toggle_favorite_product,
+    get_user_favorite
 )
 
 router = APIRouter(
@@ -25,3 +26,11 @@ router = APIRouter(
 )
 def toggle_favorite (product_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return toggle_favorite_product(user.id,product_id,db)
+
+@router.get("/my-favorite", response_model= PaginatedFavoritesResponse, status_code =status.HTTP_200_OK)
+def list_my_favorite(   page: int = Query(1, ge=1, description="Số trang hiện tại"),
+                        page_size: int = Query(20, ge=1, le=100, description="Số lượng mục trên mỗi trang"),
+                        user: User = Depends(get_current_user),
+                        db: Session = Depends(get_db)
+                    ):
+    return get_user_favorite(user.id,page,page_size,db)

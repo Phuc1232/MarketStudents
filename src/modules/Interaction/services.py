@@ -73,3 +73,47 @@ def toggle_favorite_product (user_id: int, product_id: int, db: Session):
         message= Message,
         total_favorites=total_fav
     )
+
+def get_user_favorite (user_id: int, page: int=1, page_size: int =20, db: Session=None):
+    offset = (page-1)*page_size
+    stmt = select(func.count()).select_from(Favorite)\
+                    .join(Product, Product.product_id == Favorite.product_id)\
+                    .where(Favorite.user_id == user_id,Product.deleted_at == None)
+    total = db.scalar(stmt) or 0
+
+    stmt = select(Favorite,Product).join(Product, Product.product_id == Favorite.product_id)\
+                        .options(selectinload(Product.seller).selectinload(User.profile),
+                                 selectinload(Product.condition),
+                                 selectinload(Product.images))\
+                        .where(
+                            Favorite.user_id == user_id,
+                            Product.deleted_at == None
+                        ).offset(offset).limit(page_size)
+    result = db.execute(stmt).all()
+    items : List[FavoriteProductItemResponse] = []
+    for fav,pro in result:
+        thumb = get_product_thumbnails(pro)
+        condition_name = pro.condition.condition_name if pro.condition else None
+        seller_name = get_user_display_name(pro.seller)
+        seller_avatar = get_user_avatar(pro.seller)
+
+        items.append(
+            FavoriteProductItemResponse(
+                product_id=pro.product_id,
+                title=pro.title,
+                price=pro.price,
+                thumbnail_url=thumb,
+                condition_name=condition_name,
+                seller_id=pro.seller_id,
+                seller_name=seller_name,
+                seller_avatar=seller_avatar,
+                status_id=pro.status_id,
+                favorited_at=fav.created_at or datetime.now()
+            )
+        )
+    return PaginatedFavoritesResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items
+    )
