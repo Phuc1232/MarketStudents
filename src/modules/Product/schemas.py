@@ -46,6 +46,7 @@ class ProductCreate(BaseModel):
     # Giới hạn tối đa 5 ảnh đính kèm theo đúng đặc tả SRS (BR-3, AC-8)
     images: List[ProductImageInput] = Field(
         default=[], 
+        min_length=1,
         max_length=5, 
         description="Danh sách ảnh đính kèm (tối đa 5 ảnh)"
     )
