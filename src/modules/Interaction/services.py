@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select, func, and_, or_, update
 from fastapi import HTTPException, status
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, timezone
 from src.modules import (
     FavoriteToggleResponse,
@@ -12,6 +12,8 @@ from src.modules import (
     Favorite,
     User, userProfile, userStats,
     Conversation, Participation, Message, MessageAttachment,
+    Comment,
+    CommentAuthorResponse, CommentCreate, CommentItemResponse, CommentTreeResponse,
     ConversationCreate, ConversationDetailResponse, ConversationListItemResponse,
     ConversationPartnerResponse, MessageAttachmentResponse, MessageResponseItem,
     MessageCreate, PaginatedMessagesResponse, ProductSummaryResponse, MessageResponse
@@ -130,6 +132,238 @@ def check_favorite_status (user_id: int, product_id: int, db: Session):
             is_favorited=True
         )
     return None
+
+
+# ==============================================================================
+# TASK T3: PHÂN HỆ BÌNH LUẬN ĐA CẤP (NESTED COMMENTS: AC-4, AC-5, AC-6, AC-7)
+# ==============================================================================
+
+def create_product_comment(
+    user_id: int,
+    product_id: int,
+    form: CommentCreate,
+    db: Session
+) -> CommentItemResponse:
+    """
+    Tạo bình luận mới cho sản phẩm (Bình luận gốc hoặc Phản hồi reply).
+    - BR-2: Nội dung từ 1 đến 1000 ký tự.
+    - parent_id phải trỏ tới một comment hợp lệ của cùng sản phẩm.
+    - Giới hạn độ sâu 2 cấp: Nếu reply vào một comment con cấp 2, hệ thống tự động
+      gán parent_id trỏ về comment gốc để giữ giao diện phẳng 2 tầng.
+    - Covers: AC-4, AC-5
+    """
+    # 1. Kiểm tra sản phẩm tồn tại và chưa bị xóa mềm
+    stmt_prod = select(Product).where(
+        Product.product_id == product_id,
+        Product.deleted_at.is_(None)
+    )
+    product = db.scalars(stmt_prod).first()
+
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sản phẩm ID {product_id} không tồn tại hoặc đã bị xóa."
+        )
+
+    # 2. Kiểm tra nội dung bình luận
+    content_clean = form.content.strip()
+    if not content_clean:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Nội dung bình luận không được để trống hoặc chỉ chứa khoảng trắng."
+        )
+
+    # 3. Xử lý parent_id (Logic phân cấp 2 tầng theo BR-2)
+    final_parent_id: Optional[int] = None
+
+    if form.parent_id is not None:
+        parent_comment = db.get(Comment, form.parent_id)
+        if not parent_comment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Bình luận gốc ID {form.parent_id} không tồn tại."
+            )
+
+        if parent_comment.product_id != product_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Bình luận phản hồi không thuộc về cùng một sản phẩm."
+            )
+
+        # Nếu bình luận cha đã là reply cấp 2 (đã có parent_id), thì gán parent_id về comment gốc
+        if parent_comment.parent_id is not None:
+            final_parent_id = parent_comment.parent_id
+        else:
+            final_parent_id = parent_comment.comment_id
+
+    # 4. Tạo bản ghi bình luận mới
+    new_comment = Comment(
+        product_id=product_id,
+        user_id=user_id,
+        content=content_clean,
+        parent_id=final_parent_id
+    )
+    db.add(new_comment)
+    db.commit()
+    db.refresh(new_comment)
+
+    # 5. Nạp thông tin tác giả bình luận
+    author_user = db.scalars(
+        select(User).options(selectinload(User.profile)).where(User.id == user_id)
+    ).first()
+
+    author_dto = CommentAuthorResponse(
+        user_id=user_id,
+        full_name=get_user_display_name(author_user),
+        avatar_url=get_user_avatar(author_user)
+    )
+
+    created_time = getattr(new_comment, 'CreatedAt', getattr(new_comment, 'created_at', datetime.now(timezone.utc)))
+    updated_time = getattr(new_comment, 'UpdateAt', getattr(new_comment, 'updated_at', None))
+
+    return CommentItemResponse(
+        comment_id=new_comment.comment_id,
+        product_id=new_comment.product_id,
+        content=new_comment.content,
+        parent_id=new_comment.parent_id,
+        author=author_dto,
+        created_at=created_time,
+        updated_at=updated_time
+    )
+
+
+def get_product_comments_tree(
+    product_id: int,
+    db: Session
+) -> List[CommentTreeResponse]:
+    """
+    Lấy danh sách bình luận của sản phẩm theo cấu trúc cây 2 tầng (Nested Tree).
+    - Cấp 1: Bình luận gốc (parent_id is None).
+    - Cấp 2: Danh sách replies con nằm trong field `replies` của mỗi bình luận gốc.
+    - Sắp xếp theo thứ tự thời gian tăng dần để người dùng dễ theo dõi cuộc trò chuyện.
+    - Covers: AC-6
+    """
+    # 1. Kiểm tra sản phẩm tồn tại
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sản phẩm ID {product_id} không tồn tại hoặc đã bị xóa."
+        )
+
+    # 2. Truy vấn toàn bộ bình luận của sản phẩm kèm thông tin người dùng và hồ sơ
+    stmt = (
+        select(Comment)
+        .options(
+            selectinload(Comment.user).selectinload(User.profile)
+        )
+        .where(Comment.product_id == product_id)
+        .order_by(Comment.comment_id.asc())
+    )
+    all_comments = db.scalars(stmt).all()
+
+    # 3. Thuật toán gom nhóm phân cấp (Tree grouping)
+    root_comments: List[Comment] = []
+    replies_map: Dict[int, List[CommentItemResponse]] = {}
+
+    for c in all_comments:
+        author_dto = CommentAuthorResponse(
+            user_id=c.user.id if c.user else c.user_id,
+            full_name=get_user_display_name(c.user),
+            avatar_url=get_user_avatar(c.user)
+        )
+        created_time = getattr(c, 'CreatedAt', getattr(c, 'created_at', datetime.now(timezone.utc)))
+        updated_time = getattr(c, 'UpdateAt', getattr(c, 'updated_at', None))
+
+        item_dto = CommentItemResponse(
+            comment_id=c.comment_id,
+            product_id=c.product_id,
+            content=c.content,
+            parent_id=c.parent_id,
+            author=author_dto,
+            created_at=created_time,
+            updated_at=updated_time
+        )
+
+        if c.parent_id is None:
+            root_comments.append(c)
+        else:
+            if c.parent_id not in replies_map:
+                replies_map[c.parent_id] = []
+            replies_map[c.parent_id].append(item_dto)
+
+    # 4. Đóng gói danh sách cây bình luận hoàn chỉnh
+    tree_result: List[CommentTreeResponse] = []
+    for root in root_comments:
+        root_author = CommentAuthorResponse(
+            user_id=root.user.id if root.user else root.user_id,
+            full_name=get_user_display_name(root.user),
+            avatar_url=get_user_avatar(root.user)
+        )
+        root_created = getattr(root, 'CreatedAt', getattr(root, 'created_at', datetime.now(timezone.utc)))
+
+        tree_result.append(
+            CommentTreeResponse(
+                comment_id=root.comment_id,
+                product_id=root.product_id,
+                content=root.content,
+                author=root_author,
+                created_at=root_created,
+                replies=replies_map.get(root.comment_id, [])
+            )
+        )
+
+    return tree_result
+
+
+def delete_comment(
+    comment_id: int,
+    user_id: int,
+    db: Session
+) -> MessageResponse:
+    """
+    Xóa bình luận khỏi hệ thống.
+    - BR-3: Chỉ cho phép người viết bình luận HOẶC chủ tin đăng (người bán) xóa bình luận.
+    - Xóa kèm toàn bộ các bình luận con (replies) để tránh vi phạm khóa ngoại tự tham chiếu.
+    - Covers: AC-7
+    """
+    # 1. Tìm bình luận cần xóa kèm thông tin sản phẩm sở hữu
+    stmt = (
+        select(Comment)
+        .options(selectinload(Comment.product))
+        .where(Comment.comment_id == comment_id)
+    )
+    comment = db.scalars(stmt).first()
+
+    if not comment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bình luận ID {comment_id} không tồn tại."
+        )
+
+    # 2. Kiểm tra thẩm quyền xóa (Người viết HOẶC Chủ tin đăng)
+    is_author = (comment.user_id == user_id)
+    is_product_owner = (comment.product and comment.product.seller_id == user_id)
+
+    if not (is_author or is_product_owner):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền xóa bình luận này. Chỉ tác giả bình luận hoặc chủ bài đăng mới được phép xóa."
+        )
+
+    # 3. Xóa các bình luận phản hồi con (nếu có) trước để tránh lỗi Foreign Key
+    stmt_replies = select(Comment).where(Comment.parent_id == comment_id)
+    child_replies = db.scalars(stmt_replies).all()
+    for child in child_replies:
+        db.delete(child)
+
+    # 4. Xóa bình luận chính
+    db.delete(comment)
+    db.commit()
+
+    return MessageResponse(
+        message="Đã xóa bình luận thành công."
+    )
 
 
 # ==============================================================================

@@ -8,6 +8,9 @@ from src.modules import (
     FavoriteToggleResponse,
     FavoriteStatusResponse,
     PaginatedFavoritesResponse,
+    CommentCreate,
+    CommentItemResponse,
+    CommentTreeResponse,
     ConversationCreate,
     ConversationDetailResponse,
     ConversationListItemResponse,
@@ -20,6 +23,9 @@ from src.modules.Interaction.services import (
     toggle_favorite_product,
     get_user_favorite,
     check_favorite_status,
+    create_product_comment,
+    get_product_comments_tree,
+    delete_comment,
     get_or_create_conversation,
     get_my_conversations,
     get_conversation_messages,
@@ -50,6 +56,79 @@ def list_my_favorite(   page: int = Query(1, ge=1, description="Số trang hiệ
 @router.get("/{product_id}/status", response_model=FavoriteStatusResponse, status_code = status.HTTP_200_OK)
 def get_status_favorite (product_id: int,user: User =Depends(get_current_user), db: Session = Depends(get_db)):
     return check_favorite_status(user.id, product_id,db)
+
+
+# ==============================================================================
+# NESTED COMMENTS ENDPOINTS (TASK T3: AC-4, AC-5, AC-6, AC-7)
+# ==============================================================================
+
+@router.post(
+    "/product/{product_id}/comments",
+    response_model=CommentItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Đăng bình luận mới hoặc phản hồi câu hỏi dưới bài đăng (AC-4, AC-5)"
+)
+def post_comment(
+    product_id: int,
+    form: CommentCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    - **AC-4**: Nếu `parent_id = None` -> Tạo bình luận gốc mới.
+    - **AC-5**: Nếu truyền `parent_id` hợp lệ -> Tạo câu trả lời (Reply).
+    - Tự động chuẩn hóa độ sâu tối đa 2 cấp (BR-2).
+    """
+    return create_product_comment(
+        user_id=user.id,
+        product_id=product_id,
+        form=form,
+        db=db
+    )
+
+
+@router.get(
+    "/product/{product_id}/comments",
+    response_model=List[CommentTreeResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Xem cây bình luận đa cấp của sản phẩm (Public - AC-6)"
+)
+def list_comments_tree(
+    product_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    - **AC-6**: Lấy danh sách bình luận phân cấp theo cây 2 tầng:
+      Mỗi bình luận gốc sẽ chứa danh sách các phản hồi `replies`.
+    - Endpoint công khai (Public), người dùng chưa đăng nhập vẫn xem được.
+    """
+    return get_product_comments_tree(
+        product_id=product_id,
+        db=db
+    )
+
+
+@router.delete(
+    "/comments/{comment_id}",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Xóa một bình luận (Chính chủ hoặc Người bán - AC-7)"
+)
+def remove_comment(
+    comment_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    - **AC-7**: Xóa bình luận khỏi hệ thống.
+    - Chỉ cho phép Tác giả bình luận HOẶC Chủ tin đăng (Người bán) thực hiện.
+    - Người khác cố xóa sẽ bị trả về lỗi `403 Forbidden`.
+    """
+    return delete_comment(
+        comment_id=comment_id,
+        user_id=user.id,
+        db=db
+    )
 
 
 # ==============================================================================
