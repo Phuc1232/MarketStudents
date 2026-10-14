@@ -117,3 +117,12 @@ def get_user_favorite (user_id: int, page: int=1, page_size: int =20, db: Sessio
         page_size=page_size,
         items=items
     )
+
+def check_favorite_status (user_id: int, product_id: int, db: Session):
+    favorite = db.get(Favorite, (user_id, product_id))
+    if favorite is not None:
+        return FavoriteStatusResponse(
+            product_id=product_id,
+            is_favorited=True
+        )
+    return None

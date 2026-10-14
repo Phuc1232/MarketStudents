@@ -12,7 +12,7 @@ from src.modules import (
 )
 from src.modules.Interaction.services import (
     toggle_favorite_product,
-    get_user_favorite
+    get_user_favorite, check_favorite_status
 )
 
 router = APIRouter(
@@ -34,3 +34,7 @@ def list_my_favorite(   page: int = Query(1, ge=1, description="Số trang hiệ
                         db: Session = Depends(get_db)
                     ):
     return get_user_favorite(user.id,page,page_size,db)
+
+@router.get("/{product_id}/status", response_model=FavoriteStatusResponse, status_code = status.HTTP_200_OK)
+def get_status_favorite (product_id: int,user: User =Depends(get_current_user), db: Session = Depends(get_db)):
+    return check_favorite_status(user.id, product_id,db)
