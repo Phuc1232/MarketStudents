@@ -129,6 +129,11 @@ class MessageAttachmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MessageCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000, description="Nội dung tin nhắn")
+    attachments: Optional[List[str]] = Field(default=None, description="Danh sách URL hình ảnh đính kèm (nếu có)")
+
+
 class MessageResponseItem(BaseModel):
     message_id: int
     conversation_id: int
