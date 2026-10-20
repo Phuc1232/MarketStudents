@@ -17,7 +17,8 @@ from src.modules import (
     CommentAuthorResponse, CommentCreate, CommentItemResponse, CommentTreeResponse,
     ConversationCreate, ConversationDetailResponse, ConversationListItemResponse,
     ConversationPartnerResponse, MessageAttachmentResponse, MessageResponseItem,
-    MessageCreate, PaginatedMessagesResponse, ProductSummaryResponse, MessageResponse
+    MessageCreate, PaginatedMessagesResponse, ProductSummaryResponse, MessageResponse,
+    ReviewProductConversation, ReviewCreate, ReviewResponse, SellerReviewsResponse, UserSummaryResponse
 )
 
 def get_user_display_name (user: Optional[User]):
@@ -906,4 +907,292 @@ def mark_websocket_messages_as_read(
     result = db.execute(stmt_update)
     db.commit()
     return result.rowcount or 0
+
+
+# ==============================================================================
+# 6. SELLER REVIEWS & REPUTATION SERVICES (TASK T6: AC-13, AC-14, BR-7, BR-8)
+# ==============================================================================
+
+def recalculate_seller_rating(seller_id: int, db: Session) -> float:
+    stmt = select(func.avg(ReviewProductConversation.rating)).where(
+        ReviewProductConversation.reviewee_id == seller_id
+    )
+    raw_avg = db.scalar(stmt)
+    rating_avg = round(float(raw_avg), 1) if raw_avg is not None else 0.0
+
+    stats = db.get(userStats, seller_id)
+    if stats:
+        stats.rating_avg = rating_avg
+    else:
+        stats = userStats(
+            user_id=seller_id,
+            rating_avg=rating_avg,
+            response_rate=0.0
+        )
+        db.add(stats)
+
+    return rating_avg
+
+
+def create_review_product(
+    user_id: int,
+    product_id: int,
+    form: ReviewCreate,
+    db: Session
+) -> ReviewResponse:
+    # 1. Kiểm tra sản phẩm tồn tại và chưa bị xóa mềm
+    stmt_prod = select(Product).options(selectinload(Product.status)).where(
+        Product.product_id == product_id,
+        Product.deleted_at.is_(None)
+    )
+    product = db.scalars(stmt_prod).first()
+
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sản phẩm ID {product_id} không tồn tại hoặc đã bị xóa."
+        )
+
+    # 2. Kiểm tra điều kiện tin đăng phải ở trạng thái "Đã bán" (Sold)
+    is_sold = (product.status_id == 3) or (
+        product.status is not None and product.status.status_name.lower() == "sold"
+    )
+    if not is_sold:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chỉ có thể gửi đánh giá cho người bán sau khi tin đăng đã chuyển sang trạng thái 'Đã bán' (Sold)."
+        )
+
+    # 3. Chặn người bán tự đánh giá chính mình
+    if product.seller_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bạn không thể tự gửi đánh giá cho tin đăng của chính mình."
+        )
+
+    # 4. Xác minh vai trò người mua (Quyết định kỹ thuật Q2 & Quy tắc BR-7)
+    # Người gửi đánh giá phải là buyer_id được gán trên sản phẩm
+    # HOẶC là người đã từng có cuộc hội thoại trao đổi (Conversation) với người bán về sản phẩm này
+    is_assigned_buyer = (product.buyer_id == user_id)
+    has_chat_history = False
+
+    if not is_assigned_buyer:
+        stmt_conv = (
+            select(Participation)
+            .join(Conversation, Conversation.conversation_id == Participation.conversation_id)
+            .where(
+                Conversation.product_id == product_id,
+                Participation.buyer_id == user_id,
+                Participation.seller_id == product.seller_id
+            )
+        )
+        has_chat_history = db.scalars(stmt_conv).first() is not None
+
+    if not is_assigned_buyer and not has_chat_history:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền đánh giá sản phẩm này. Chỉ người mua thực tế hoặc người đã có cuộc hội thoại trao đổi về sản phẩm mới được gửi đánh giá."
+        )
+
+    # 5. Kiểm tra chống đánh giá trùng lặp (AC-14)
+    # Khóa chính phức hợp: (product_id, reviewer_id, reviewee_id)
+    existing_review = db.get(
+        ReviewProductConversation,
+        (product_id, user_id, product.seller_id)
+    )
+    if existing_review:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bạn đã gửi đánh giá cho người bán về sản phẩm này trước đó rồi. Mỗi sản phẩm chỉ được đánh giá một lần."
+        )
+
+    # 6. Kiểm tra giới hạn số sao hợp lệ (1 - 5)
+    if form.rating < 1 or form.rating > 5:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Điểm đánh giá bắt buộc phải là số nguyên nằm trong khoảng từ 1 đến 5 sao."
+        )
+
+    # 7. Khởi tạo và lưu bản ghi đánh giá
+    clean_content = form.content.strip() if form.content and form.content.strip() else None
+    new_review = ReviewProductConversation(
+        product_id=product_id,
+        reviewer_id=user_id,
+        reviewee_id=product.seller_id,
+        rating=form.rating,
+        content=clean_content
+    )
+    db.add(new_review)
+    db.flush()
+
+    # 8. Tự động tính toán lại điểm uy tín và cập nhật user_stats (BR-8, AC-13)
+    recalculate_seller_rating(seller_id=product.seller_id, db=db)
+
+    # 9. Commit toàn bộ transaction để đảm bảo tính nhất quán dữ liệu (ACID)
+    db.commit()
+    db.refresh(new_review)
+
+    # 10. Đóng gói DTO phản hồi
+    reviewer_user = db.scalars(
+        select(User).options(selectinload(User.profile)).where(User.id == user_id)
+    ).first()
+
+    reviewer_dto = UserSummaryResponse(
+        user_id=user_id,
+        full_name=get_user_display_name(reviewer_user),
+        avatar_url=get_user_avatar(reviewer_user)
+    )
+
+    created_time = getattr(
+        new_review,
+        'CreatedAt',
+        getattr(new_review, 'created_at', datetime.now(timezone.utc))
+    )
+
+    return ReviewResponse(
+        product_id=new_review.product_id,
+        reviewer=reviewer_dto,
+        reviewee_id=new_review.reviewee_id,
+        rating=new_review.rating,
+        content=new_review.content,
+        created_at=created_time
+    )
+
+
+def get_product_reviews(product_id: int, db: Session) -> List[ReviewResponse]:
+    """
+    Lấy danh sách tất cả các đánh giá của một sản phẩm (Public).
+    - Sắp xếp đánh giá mới nhất lên đầu.
+    - Nạp thông tin người đánh giá và ảnh đại diện.
+    """
+    # Kiểm tra sản phẩm tồn tại và chưa bị xóa mềm
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sản phẩm ID {product_id} không tồn tại hoặc đã bị xóa."
+        )
+
+    stmt = (
+        select(ReviewProductConversation)
+        .options(
+            selectinload(ReviewProductConversation.reviewer).selectinload(User.profile)
+        )
+        .where(ReviewProductConversation.product_id == product_id)
+        .order_by(
+            getattr(ReviewProductConversation, 'CreatedAt', ReviewProductConversation.product_id).desc()
+        )
+    )
+    reviews = db.scalars(stmt).all()
+
+    result: List[ReviewResponse] = []
+    for rev in reviews:
+        reviewer_dto = UserSummaryResponse(
+            user_id=rev.reviewer_id,
+            full_name=get_user_display_name(rev.reviewer),
+            avatar_url=get_user_avatar(rev.reviewer)
+        )
+        created_time = getattr(
+            rev,
+            'CreatedAt',
+            getattr(rev, 'created_at', datetime.now(timezone.utc))
+        )
+        result.append(
+            ReviewResponse(
+                product_id=rev.product_id,
+                reviewer=reviewer_dto,
+                reviewee_id=rev.reviewee_id,
+                rating=rev.rating,
+                content=rev.content,
+                created_at=created_time
+            )
+        )
+    return result
+
+
+def get_seller_reviews(
+    seller_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    db: Session = None
+) -> SellerReviewsResponse:
+    """
+    Xem điểm uy tín và danh sách nhận xét đánh giá của người bán kèm phân trang (Public).
+    - Trả về điểm trung bình rating_avg (từ user_stats hoặc tự tính).
+    - Trả về tổng số lượt đánh giá total_reviews.
+    - Danh sách đánh giá nhận được sắp xếp mới nhất trước.
+    """
+    # 1. Kiểm tra người dùng tồn tại
+    seller = db.get(User, seller_id)
+    if not seller:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Người dùng ID {seller_id} không tồn tại trong hệ thống."
+        )
+
+    # 2. Lấy điểm uy tín từ user_stats
+    stats = db.get(userStats, seller_id)
+    if stats and stats.rating_avg is not None:
+        rating_avg = stats.rating_avg
+    else:
+        avg_stmt = select(func.avg(ReviewProductConversation.rating)).where(
+            ReviewProductConversation.reviewee_id == seller_id
+        )
+        raw_avg = db.scalar(avg_stmt)
+        rating_avg = round(float(raw_avg), 1) if raw_avg is not None else 0.0
+
+    # 3. Đếm tổng số lượt đánh giá nhận được
+    count_stmt = select(func.count()).select_from(ReviewProductConversation).where(
+        ReviewProductConversation.reviewee_id == seller_id
+    )
+    total_reviews = db.scalar(count_stmt) or 0
+
+    # 4. Phân trang danh sách đánh giá
+    offset = (page - 1) * page_size
+    stmt = (
+        select(ReviewProductConversation)
+        .options(
+            selectinload(ReviewProductConversation.reviewer).selectinload(User.profile)
+        )
+        .where(ReviewProductConversation.reviewee_id == seller_id)
+        .order_by(
+            getattr(ReviewProductConversation, 'CreatedAt', ReviewProductConversation.product_id).desc()
+        )
+        .offset(offset)
+        .limit(page_size)
+    )
+    reviews = db.scalars(stmt).all()
+
+    # 5. Đóng gói danh sách reviews
+    items: List[ReviewResponse] = []
+    for rev in reviews:
+        reviewer_dto = UserSummaryResponse(
+            user_id=rev.reviewer_id,
+            full_name=get_user_display_name(rev.reviewer),
+            avatar_url=get_user_avatar(rev.reviewer)
+        )
+        created_time = getattr(
+            rev,
+            'CreatedAt',
+            getattr(rev, 'created_at', datetime.now(timezone.utc))
+        )
+        items.append(
+            ReviewResponse(
+                product_id=rev.product_id,
+                reviewer=reviewer_dto,
+                reviewee_id=rev.reviewee_id,
+                rating=rev.rating,
+                content=rev.content,
+                created_at=created_time
+            )
+        )
+
+    return SellerReviewsResponse(
+        seller_id=seller_id,
+        rating_avg=rating_avg,
+        total_reviews=total_reviews,
+        page=page,
+        page_size=page_size,
+        reviews=items
+    )
 

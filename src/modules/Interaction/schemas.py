@@ -193,9 +193,13 @@ class ReviewResponse(BaseModel):
 
 class SellerReviewsResponse(BaseModel):
     seller_id: int
-    rating_avg: float
-    total_reviews: int
-    reviews: List[ReviewResponse]
+    rating_avg: float = Field(..., description="Điểm đánh giá trung bình làm tròn 1 chữ số thập phân (vd: 4.8)")
+    total_reviews: int = Field(..., description="Tổng số lượt đánh giá người bán đã nhận")
+    page: Optional[int] = Field(1, description="Số trang hiện tại")
+    page_size: Optional[int] = Field(10, description="Số lượng đánh giá trên mỗi trang")
+    reviews: List[ReviewResponse] = Field(default=[], description="Danh sách các đánh giá nhận được")
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==============================================================================

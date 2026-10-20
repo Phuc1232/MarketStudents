@@ -21,7 +21,10 @@ from src.modules import (
     MessageCreate,
     MessageResponseItem,
     PaginatedMessagesResponse,
-    MessageResponse
+    MessageResponse,
+    ReviewCreate,
+    ReviewResponse,
+    SellerReviewsResponse
 )
 from src.modules.Interaction.services import (
     toggle_favorite_product,
@@ -38,7 +41,10 @@ from src.modules.Interaction.services import (
     authenticate_ws_token,
     verify_conversation_member,
     save_websocket_message,
-    mark_websocket_messages_as_read
+    mark_websocket_messages_as_read,
+    create_review_product,
+    get_product_reviews,
+    get_seller_reviews
 )
 
 router = APIRouter(
@@ -422,4 +428,83 @@ async def websocket_chat_endpoint(
         manager.disconnect(conversation_id, websocket, user_id)
     except Exception:
         # Bắt mọi ngoại lệ bất ngờ khác và đảm bảo giải phóng socket
-        manager.disconnect(conversation_id, websocket, user_id)
+        manager.disconnect(conversation_id, websocket, user_id)
+
+
+# ==============================================================================
+# SELLER REVIEWS & REPUTATION ENDPOINTS (TASK T6: AC-13, AC-14)
+# ==============================================================================
+
+@router.post(
+    "/product/{product_id}/reviews",
+    response_model=ReviewResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Đánh giá người bán sau khi giao dịch sản phẩm hoàn tất (AC-13, AC-14)"
+)
+def submit_product_review(
+    product_id: int,
+    form: ReviewCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    **Gửi đánh giá sao và nhận xét cho người bán sau khi mua hàng:**
+    - **Điều kiện**: Tin đăng phải ở trạng thái **'Đã bán' (Sold)**.
+    - **Phân quyền**: Người gọi API phải là người mua (`buyer_id`) hoặc người đã từng trao đổi (Conversation) về sản phẩm này.
+    - **Ràng buộc**: Không thể tự đánh giá chính mình. Mỗi sản phẩm chỉ được đánh giá duy nhất **1 lần** (AC-14, trả về HTTP 409 nếu trùng).
+    - **Hệ quả**: Điểm đánh giá trung bình `rating_avg` của người bán trong bảng `user_stats` tự động được tính toán lại ngay lập tức (AC-13, BR-8).
+    """
+    return create_review_product(
+        user_id=user.id,
+        product_id=product_id,
+        form=form,
+        db=db
+    )
+
+
+@router.get(
+    "/product/{product_id}/reviews",
+    response_model=List[ReviewResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Xem danh sách đánh giá của một sản phẩm (Public)"
+)
+def list_product_reviews(
+    product_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    **Xem toàn bộ danh sách đánh giá của sản phẩm:**
+    - Endpoint công khai (Public), không yêu cầu đăng nhập.
+    - Trả về danh sách đánh giá kèm tên và ảnh đại diện của người mua, xếp theo thời gian mới nhất.
+    """
+    return get_product_reviews(
+        product_id=product_id,
+        db=db
+    )
+
+
+@router.get(
+    "/user/{user_id}/reviews",
+    response_model=SellerReviewsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Xem điểm uy tín và danh sách nhận xét đánh giá của người bán (Public)"
+)
+def list_seller_reviews(
+    user_id: int,
+    page: int = Query(1, ge=1, description="Số trang hiện tại"),
+    page_size: int = Query(10, ge=1, le=100, description="Số lượng đánh giá mỗi trang"),
+    db: Session = Depends(get_db)
+):
+    """
+    **Xem hồ sơ uy tín và lịch sử đánh giá của người bán:**
+    - Endpoint công khai (Public), không yêu cầu đăng nhập.
+    - Trả về điểm trung bình `rating_avg` (thang điểm 5, làm tròn 1 số thập phân), tổng số lượt đánh giá `total_reviews`.
+    - Hỗ trợ phân trang danh sách nhận xét qua `page` và `page_size`.
+    """
+    return get_seller_reviews(
+        seller_id=user_id,
+        page=page,
+        page_size=page_size,
+        db=db
+    )
+
