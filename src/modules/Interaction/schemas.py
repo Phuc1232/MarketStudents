@@ -196,3 +196,52 @@ class SellerReviewsResponse(BaseModel):
     rating_avg: float
     total_reviews: int
     reviews: List[ReviewResponse]
+
+
+# ==============================================================================
+# 5. WEBSOCKET REAL-TIME CHAT SCHEMAS (TASK T5: AC-10, AC-11, AC-12)
+# ==============================================================================
+
+class WSIncomingPayload(BaseModel):
+    """Payload dữ liệu Client gửi lên Server qua kết nối WebSocket"""
+    action: str = Field(..., description="Hành động: 'send_message', 'mark_read', 'ping'")
+    content: Optional[str] = Field(None, min_length=1, max_length=2000, description="Nội dung tin nhắn")
+    attachments: Optional[List[str]] = Field(default=None, description="Danh sách URL hình ảnh đính kèm")
+
+
+class WSNewMessageData(BaseModel):
+    message_id: int
+    conversation_id: int
+    sender_id: int
+    content: str
+    is_read: bool
+    sent_at: datetime
+    attachments: List[MessageAttachmentResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WSNewMessageEvent(BaseModel):
+    type: str = "new_message"
+    data: WSNewMessageData
+
+
+class WSReadReceiptData(BaseModel):
+    conversation_id: int
+    reader_id: int
+    read_at: datetime
+
+
+class WSReadReceiptEvent(BaseModel):
+    type: str = "read_receipt"
+    data: WSReadReceiptData
+
+
+class WSPongEvent(BaseModel):
+    type: str = "pong"
+    timestamp: datetime
+
+
+class WSErrorEvent(BaseModel):
+    type: str = "error"
+    message: str

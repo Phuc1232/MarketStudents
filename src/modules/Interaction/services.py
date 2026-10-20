@@ -3,6 +3,7 @@ from sqlalchemy import select, func, and_, or_, update
 from fastapi import HTTPException, status
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
+from src.share.uilts import SECRET_KEY, ALGORITHM, jwt
 from src.modules import (
     FavoriteToggleResponse,
     FavoriteStatusResponse,
@@ -776,3 +777,133 @@ def send_message_rest(
         sent_at=new_msg.sent_at,
         attachments=att_dtos
     )
+
+
+# ==============================================================================
+# TASK T5: NGHIỆP VỤ XỬ LÝ CHO KÊNH WEBSOCKET REAL-TIME CHAT
+# ==============================================================================
+
+def authenticate_ws_token(token: Optional[str], db: Session) -> Optional[User]:
+    """
+    Xác thực token JWT được gửi kèm qua WebSocket query param `?token=...`.
+    - Trả về User nếu token hợp lệ và tài khoản đang hoạt động.
+    - Trả về None nếu thiếu token, sai chữ ký, hết hạn hoặc tài khoản bị khóa.
+    - Covers: BR-5, AC-11
+    """
+    if not token or not token.strip():
+        return None
+    try:
+        payload = jwt.decode(token.strip(), SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+        stmt = select(User).where(User.id == user_id, User.isActive.is_(True))
+        user = db.scalars(stmt).first()
+        return user
+    except Exception:
+        return None
+
+
+def verify_conversation_member(conversation_id: int, user_id: int, db: Session) -> bool:
+    """
+    Kiểm tra xem user_id có quyền tham gia cuộc hội thoại conversation_id hay không.
+    - Bắt buộc user_id phải là buyer_id hoặc seller_id trong bảng Participation.
+    - Covers: BR-5, AC-11
+    """
+    stmt = select(Participation).where(
+        Participation.conversation_id == conversation_id,
+        or_(
+            Participation.buyer_id == user_id,
+            Participation.seller_id == user_id
+        )
+    )
+    part = db.scalars(stmt).first()
+    return part is not None
+
+
+def save_websocket_message(
+    conversation_id: int,
+    sender_id: int,
+    content: str,
+    attachments: Optional[List[str]],
+    db: Session
+) -> MessageResponseItem:
+    """
+    Lưu tin nhắn gửi qua WebSocket vào cơ sở dữ liệu.
+    - Cập nhật conversations.last_message_at.
+    - Tạo các bản ghi MessageAttachment nếu có ảnh đính kèm.
+    - Trả về DTO MessageResponseItem để đóng gói sự kiện broadcast.
+    - Covers: AC-12
+    """
+    now_time = datetime.now(timezone.utc)
+    new_msg = Message(
+        conversation_id=conversation_id,
+        sender_id=sender_id,
+        content=content.strip(),
+        is_read=False,
+        sent_at=now_time
+    )
+    db.add(new_msg)
+    db.flush()
+
+    att_dtos: List[MessageAttachmentResponse] = []
+    if attachments:
+        for url in attachments:
+            clean_url = str(url).strip()
+            if clean_url:
+                new_att = MessageAttachment(
+                    message_id=new_msg.message_id,
+                    file_url=clean_url,
+                    file_type="image"
+                )
+                db.add(new_att)
+                db.flush()
+                att_dtos.append(
+                    MessageAttachmentResponse(
+                        attachment_id=new_att.attachment_id,
+                        file_url=new_att.file_url,
+                        file_type=new_att.file_type
+                    )
+                )
+
+    conv = db.get(Conversation, conversation_id)
+    if conv:
+        conv.last_message_at = now_time
+
+    db.commit()
+    db.refresh(new_msg)
+
+    return MessageResponseItem(
+        message_id=new_msg.message_id,
+        conversation_id=new_msg.conversation_id,
+        sender_id=new_msg.sender_id,
+        content=new_msg.content,
+        is_read=new_msg.is_read,
+        sent_at=new_msg.sent_at,
+        attachments=att_dtos
+    )
+
+
+def mark_websocket_messages_as_read(
+    conversation_id: int,
+    reader_id: int,
+    db: Session
+) -> int:
+    """
+    Đánh dấu tất cả tin nhắn do đối phương gửi trong hội thoại là đã đọc (is_read = True).
+    Trả về số lượng tin nhắn đã được cập nhật.
+    - Covers: BR-6, AC-12
+    """
+    stmt_update = (
+        update(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.sender_id != reader_id,
+            Message.is_read == False
+        )
+        .values(is_read=True)
+    )
+    result = db.execute(stmt_update)
+    db.commit()
+    return result.rowcount or 0
+
