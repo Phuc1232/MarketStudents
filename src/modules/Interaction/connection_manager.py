@@ -17,6 +17,8 @@ class ConnectionManager:
         self.active_rooms: Dict[int, List[WebSocket]] = {}
         # Map conversation_id -> Map websocket -> user_id (nhận diện socket thuộc user nào)
         self.socket_users: Dict[int, Dict[WebSocket, int]] = {}
+        # Map user_id -> List[WebSocket] để push thông báo cá nhân Real-time (Seq 7, 8)
+        self.user_sockets: Dict[int, List[WebSocket]] = {}
 
     async def connect(self, conversation_id: int, websocket: WebSocket, user_id: int) -> None:
         """
@@ -30,6 +32,12 @@ class ConnectionManager:
 
         self.active_rooms[conversation_id].append(websocket)
         self.socket_users[conversation_id][websocket] = user_id
+
+        # Đăng ký socket cho user_id
+        if user_id not in self.user_sockets:
+            self.user_sockets[user_id] = []
+        self.user_sockets[user_id].append(websocket)
+
         logger.info(
             f"[WS CONNECT] User #{user_id} tham gia phòng #{conversation_id}. "
             f"Tổng kết nối trong phòng: {len(self.active_rooms[conversation_id])}"
@@ -47,6 +55,12 @@ class ConnectionManager:
             if conversation_id in self.socket_users and websocket in self.socket_users[conversation_id]:
                 del self.socket_users[conversation_id][websocket]
 
+            # Xóa socket khỏi user_sockets
+            if user_id and user_id in self.user_sockets and websocket in self.user_sockets[user_id]:
+                self.user_sockets[user_id].remove(websocket)
+                if not self.user_sockets[user_id]:
+                    del self.user_sockets[user_id]
+
             # Dọn dẹp phòng rỗng
             if not self.active_rooms[conversation_id]:
                 del self.active_rooms[conversation_id]
@@ -58,6 +72,29 @@ class ConnectionManager:
                     f"[WS DISCONNECT] User #{user_id} rời phòng #{conversation_id}. "
                     f"Còn lại: {len(self.active_rooms[conversation_id])} kết nối."
                 )
+
+    async def send_to_user(self, user_id: int, message: dict) -> bool:
+        """
+        Đẩy dữ liệu Real-time tới một user cụ thể nếu user đó đang online bất kỳ tab/thiết bị nào (Seq 7, 8).
+        Trả về True nếu gửi thành công ít nhất 1 socket, False nếu user đang Offline.
+        """
+        if user_id not in self.user_sockets or not self.user_sockets[user_id]:
+            return False
+
+        dead_sockets = []
+        sent = False
+        for socket in list(self.user_sockets[user_id]):
+            try:
+                await socket.send_json(message)
+                sent = True
+            except Exception:
+                dead_sockets.append(socket)
+
+        for dead in dead_sockets:
+            if dead in self.user_sockets[user_id]:
+                self.user_sockets[user_id].remove(dead)
+
+        return sent
 
     async def broadcast_to_room(self, conversation_id: int, message: dict) -> None:
         """

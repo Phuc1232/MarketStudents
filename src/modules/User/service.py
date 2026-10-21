@@ -2,23 +2,37 @@ from fastapi import Depends, HTTPException, status
 from src.modules import (User, TokenData, Token, Register, User_Update, 
                          User_Providers, userProfile, UserProfileUpdate,
                          Address, AddressCreate,
-                         StudentVerification)
+                         StudentVerification, Blacklist, SavedSearch)
 from src.share.uilts import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, timedelta, jwt, datetime, timezone
 from src.Core.security import get_password_hashed, verify_password
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from src.api.deps import get_db
 from fastapi.security import OAuth2PasswordBearer
-from typing import Annotated
+from typing import Annotated, Optional, List
 import random
 import re
 from datetime import timedelta
 import jwt
 oauth_schemas=OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth_schemas_optional=OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
+
+def check_email_blacklisted(email: str, db: Session):
+    """Kiểm tra email có nằm trong danh sách đen hay không (Seq 1)"""
+    stmt = select(Blacklist).where(Blacklist.blocked_value == email.strip().lower())
+    blacklisted = db.scalars(stmt).first()
+    if blacklisted:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Email này đã bị chặn: {blacklisted.reason or 'Vi phạm quy định của hệ thống UniMarket'}"
+        )
 
 
 def user_register(user: Register, db: Session= Depends(get_db)):
+    # 1. Kiểm tra Blacklist theo Seq 1
+    check_email_blacklisted(user.Email, db)
+
     stmt=select(User).where(User.Email==user.Email)
     user_model=db.scalars(stmt).first()
     if user_model:
@@ -30,8 +44,11 @@ def user_register(user: Register, db: Session= Depends(get_db)):
     db.refresh(new_user)
     new_provider=User_Providers(user_id=new_user.id ,provider_name="local")
     db.add(new_provider)
+    new_profile = userProfile(user_id=new_user.id, type_mode="light")
+    db.add(new_profile)
     db.commit()
     return new_user
+
 
 def get_all_user(role_id: int, db: Session= Depends(get_db)):
     if(role_id==1):
@@ -96,19 +113,44 @@ def get_current_user(token:  Annotated[str, Depends(oauth_schemas)], db: Session
         raise credentials_exception
     return user
 
+def get_optional_user(token: Annotated[Optional[str], Depends(oauth_schemas_optional)] = None, db: Session = Depends(get_db)) -> Optional[User]:
+    """Dependency trích xuất User nếu có token hợp lệ, trả về None nếu không đăng nhập (Public endpoints)."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if user_id is None:
+            return None
+        return get_user(user_id, db)
+    except Exception:
+        return None
+
 def authenticate_user(username: str, password: str ,db: Session= Depends(get_db)):
     dummy_password=get_password_hashed("thienphucne")
-    stmt=select(User).where(username==User.Email, User.isActive == True)
+    stmt=select(User).where(User.Email == username)
     user=db.scalars(stmt).first()
     if not user:
         verify_password(password,dummy_password)
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Sai Tai Khoan Hoac Mat Khau")
+    
+    # Kiểm tra tài khoản bị vô hiệu hóa / khóa
+    if not user.isActive:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên hoặc gửi yêu cầu kháng cáo mở khóa!"
+        )
+
+    # Kiểm tra Blacklist theo Seq 1
+    check_email_blacklisted(user.Email, db)
+
     if not verify_password(password, user.PassWord):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Sai Tai Khoan Hoac Mat Khau")
     access_token_expire= timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
     access_token=create_access_token({"user_id":user.id}, access_token_expire)
     
     return Token(access_token=access_token, token_type="bearer")
+
 
 def get_profile (user_id: int, db: Session):
     stmt= select(userProfile).where(userProfile.user_id==user_id)
@@ -202,13 +244,16 @@ def request_student_otp (user_id: int, edu_email: str, db: Session):
         "user_id": user_id,
         "expires_at": expires_at
     }
-    #In mã OTP ra Console phục vụ kiểm thử môi trường dev
-    print("\n" + "="*60)
-    print(f"[UNIMARKET OTP SERVICE] GỬI MÃ XÁC THỰC SINH VIÊN")
-    print(f"-> Gửi tới Email: {email_clean}")
-    print(f"-> Mã OTP (6 số): {otp}")
-    print(f"-> Thời hạn     : 5 phút (hết hạn lúc {expires_at.strftime('%H:%M:%S')})")
-    print("="*60 + "\n")
+    # In mã OTP ra Console phục vụ kiểm thử môi trường dev
+    try:
+        print("\n" + "="*60)
+        print(f"[UNIMARKET OTP SERVICE] GUI MA XAC THUC SINH VIEN")
+        print(f"-> Gui toi Email: {email_clean}")
+        print(f"-> Ma OTP (6 so): {otp}")
+        print(f"-> Thoi han     : 5 phut (het han luc {expires_at.strftime('%H:%M:%S')})")
+        print("="*60 + "\n")
+    except Exception:
+        pass
 
     return {
         "message": "Mã OTP đã được gửi thành công đến email trường của bạn. Vui lòng kiểm tra hộp thư!",
@@ -267,7 +312,7 @@ def upload_student_card (user_id: int, card_image_url: str, db: Session):
         verfication= StudentVerification(
             user_id=user_id,
             status="Pending",
-            student_card_image = card_image_url
+            student_card_img = card_image_url
         )
         db.add(verfication)
     else:
@@ -277,3 +322,52 @@ def upload_student_card (user_id: int, card_image_url: str, db: Session):
     db.commit()
     db.refresh(verfication)
     return verfication
+
+
+# ==============================================================================
+# LỊCH SỬ TÌM KIẾM (SAVEDSEARCH - SEQ 14)
+# ==============================================================================
+
+def get_user_search_history(user_id: int, db: Session):
+    """Lấy danh sách các từ khóa tìm kiếm gần đây của người dùng (Seq 14)"""
+    stmt = select(SavedSearch).where(SavedSearch.user_id == user_id).order_by(SavedSearch.search_id.desc()).limit(10)
+    return db.scalars(stmt).all()
+
+
+def save_user_search_keyword(user_id: int, keyword: str, filter_criteria: Optional[dict], db: Session):
+    """Lưu hoặc cập nhật từ khóa tìm kiếm của người dùng (Seq 14)"""
+    kw = keyword.strip()
+    if not kw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Từ khóa không được để trống")
+
+    stmt = select(SavedSearch).where(
+        SavedSearch.user_id == user_id,
+        func.lower(SavedSearch.keyword) == kw.lower()
+    )
+    existing = db.scalars(stmt).first()
+    if existing:
+        existing.filter_criteria = filter_criteria
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    new_saved = SavedSearch(
+        user_id=user_id,
+        keyword=kw,
+        filter_criteria=filter_criteria
+    )
+    db.add(new_saved)
+    db.commit()
+    db.refresh(new_saved)
+    return new_saved
+
+
+def delete_user_search_keyword(search_id: int, user_id: int, db: Session):
+    """Xóa một từ khóa khỏi lịch sử tìm kiếm (Seq 14)"""
+    stmt = select(SavedSearch).where(SavedSearch.search_id == search_id, SavedSearch.user_id == user_id)
+    item = db.scalars(stmt).first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy mục lịch sử tìm kiếm")
+    db.delete(item)
+    db.commit()
+    return {"message": "Đã xóa từ khóa khỏi lịch sử tìm kiếm thành công"}

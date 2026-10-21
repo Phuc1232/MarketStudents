@@ -1,11 +1,14 @@
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, case
 from fastapi import HTTPException, status
 from datetime import datetime, timezone
-from typing import Optional
-from src.modules import  (Product, ProductImage, ProductAttribute, ProductStatus,
-                            ProductCondition, ProductView, SubCategory, Category,
-                            User, Address, MasterDistrict, MasterWard, ProductCreate, ProductUpdate)
+from typing import Optional, List
+from src.modules import (
+    Product, ProductImage, ProductAttribute, ProductStatus,
+    ProductCondition, ProductView, SubCategory, Category,
+    User, Address, MasterDistrict, MasterWard, ProductCreate, ProductUpdate,
+    SavedSearch
+)
 
 def get_all_product (db: Session):
     return db.scalars(select(Product)).all()
@@ -73,25 +76,59 @@ def create_new_product (user_id: int, form: ProductCreate ,db: Session):
     db.refresh(new_pro)
     return get_product_by_id (new_pro.product_id, user_id, db)
 
-def get_product_by_id (product_id: int, user_id: int, db: Session):
-    stmt =(select(Product).where(Product.product_id==product_id, Product.deleted_at == None).
-           options(selectinload(Product.images),
-                   selectinload(Product.seller),
-                   selectinload(Product.value)))
+def get_product_by_id (product_id: int, user_id: Optional[int] = None, db: Session = None):
+    stmt = (
+        select(Product)
+        .where(Product.product_id == product_id, Product.deleted_at == None)
+        .options(
+            selectinload(Product.images),
+            selectinload(Product.seller),
+            selectinload(Product.value).selectinload(ProductAttribute.attribute),
+            selectinload(Product.condition),
+            selectinload(Product.status)
+        )
+    )
     product = db.scalars(stmt).first()
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Không tìm thấy sản phẩm hoặc tin đăng đã bị xóa"
         )
-    try:
-        new_view = ProductView(product_id=product_id, user_id=user_id)
+    return product
+
+def record_product_view_history(product_id: int, user_id: int, db: Session):
+    """
+    Xử lý lưu lịch sử xem bất đồng bộ có kiểm tra chống trùng lặp (Seq 9).
+    Nếu đã tồn tại -> Update viewed_at.
+    Nếu chưa tồn tại -> Insert dòng mới.
+    """
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy sản phẩm"
+        )
+
+    stmt = select(ProductView).where(
+        ProductView.product_id == product_id,
+        ProductView.user_id == user_id
+    )
+    existing_view = db.scalars(stmt).first()
+
+    now_utc = datetime.now(timezone.utc)
+    if existing_view:
+        existing_view.viewed_at = now_utc
+        db.commit()
+        return {"message": "Đã cập nhật thời gian xem sản phẩm", "updated": True}
+    else:
+        new_view = ProductView(
+            product_id=product_id,
+            user_id=user_id,
+            viewed_at=now_utc
+        )
         db.add(new_view)
         db.commit()
-    except Exception:
-        db.rollback()
-
-    return product
+        return {"message": "Đã ghi nhận lượt xem mới", "created": True}
 
 def search_products (
     keyword: Optional[str] = None,
@@ -107,12 +144,9 @@ def search_products (
     page_size: int = 20,
     db: Session = None      
     ):
-    # tim kiem tren toan van
     query = select(Product).where(Product.deleted_at == None)
-    # ket hop them trang thai san pham (neu co)
     if status_id is not None:
         query = query.where(Product.status_id == status_id)
-    # ket hop tim kiem theo tu khoa 
     if keyword is not None:
         kw_pattern = f"%{keyword.strip()}%"
         query = query.where (
@@ -121,36 +155,42 @@ def search_products (
                 Product.description.ilike(kw_pattern)
             )
         )
-    # ket hop loc theo khoang gia (neu co)
     if min_price is not None:
         query = query.where(Product.price >= min_price)
     if max_price is not None:
         query = query.where(Product.price <= max_price)
-    # ket hop loc theo danh muc (neu co)
     if sub_category_id is not None:
         query = query.where(Product.sub_category_id == sub_category_id)
     elif category_id is not None:
         query = query.join(SubCategory, Product.sub_category_id == SubCategory.sub_category_id)\
                         .where (SubCategory.category_id == category_id)
-    # ket hop loc theo tinh trang san pham (neu co)
     if condition_id is not None:
         query = query.where(Product.condition_id == condition_id)
-    # ket hop loc theo dia gioi (neu co)
-    if province_id is not None or district_id is not None:
-        query = query.join(Address, Address.product_id == Product.product_id)\
-                    .join(MasterWard, Address.ward_id == MasterWard.ward_id)
-        if district_id is not None:
-            query = query.where(MasterWard.district_id == district_id)
+
+    # Ưu tiên vị trí địa lý theo Seq 13
+    has_location_filter = (province_id is not None or district_id is not None)
+    if has_location_filter:
+        query = query.outerjoin(Address, Address.product_id == Product.product_id)\
+                     .outerjoin(MasterWard, Address.ward_id == MasterWard.ward_id)\
+                     .outerjoin(MasterDistrict, MasterWard.district_id == MasterDistrict.district_id)
+
         if province_id is not None:
-            query = query.join(MasterDistrict, MasterWard.district_id == MasterDistrict.district_id)\
-                            .where(MasterDistrict.province_id == province_id)
-    # dem ket qua tra ve
-    stmt = select(func.count()).select_from(query.subquery())
-    total = db.scalar(stmt) or 0
-    # phan trang
+            query = query.where(MasterDistrict.province_id == province_id)
+
+        rank_expr = case(
+            (MasterWard.district_id == district_id, 2),
+            (MasterDistrict.province_id == province_id, 1),
+            else_=0
+        )
+        query = query.order_by(rank_expr.desc(), Product.CreatedAt.desc())
+    else:
+        query = query.order_by(Product.CreatedAt.desc())
+
+    stmt_count = select(func.count()).select_from(query.subquery())
+    total = db.scalar(stmt_count) or 0
+
     offset = (page-1)*page_size
-    query = query.order_by(Product.CreatedAt.desc()).offset(offset).limit(page_size)
-    items = db.scalars(query).all()
+    items = db.scalars(query.offset(offset).limit(page_size)).all()
 
     return {
         "total": total,
@@ -158,6 +198,32 @@ def search_products (
         "page_size": page_size,
         "items": items
     }
+
+def get_popular_search_suggestions(db: Session, limit: int = 8) -> List[str]:
+    """
+    Lấy danh sách các từ khóa tìm kiếm thịnh hành được quan tâm nhất (Seq 14).
+    Ưu tiên lấy các từ khóa được tìm nhiều nhất trong bảng SavedSearch.
+    """
+    stmt = (
+        select(SavedSearch.keyword, func.count(SavedSearch.search_id).label("total_searches"))
+        .group_by(SavedSearch.keyword)
+        .order_by(func.count(SavedSearch.search_id).desc())
+        .limit(limit)
+    )
+    results = db.execute(stmt).all()
+    keywords = [row[0] for row in results if row[0]]
+
+    fallback_defaults = [
+        "iPhone 14", "Macbook cũ", "Giáo trình Toán", "Xe máy Wave",
+        "Tủ lạnh mini", "Bàn học gấp", "Máy tính Casio", "Màn hình 24 inch"
+    ]
+    for kw in fallback_defaults:
+        if len(keywords) >= limit:
+            break
+        if kw not in keywords:
+            keywords.append(kw)
+
+    return keywords
 
 def get_my_product (user_id: int, db: Session):
     stmt = select(Product).where(Product.seller_id == user_id, Product.deleted_at == None)\

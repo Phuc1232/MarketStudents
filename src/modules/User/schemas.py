@@ -72,3 +72,16 @@ class StudentVerificationResponse(BaseModel):
     submitted_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+# --- 5. LỊCH SỬ TÌM KIẾM (SAVEDSEARCH - SEQ 14) ---
+class SavedSearchCreate(BaseModel):
+    keyword: str = Field(..., max_length=255, description="Từ khóa tìm kiếm")
+    filter_criteria: Optional[dict] = Field(None, description="Bộ lọc JSON đi kèm (khoảng giá, khu vực, danh mục)")
+
+class SavedSearchResponse(BaseModel):
+    search_id: int
+    user_id: int
+    keyword: str
+    filter_criteria: Optional[dict] = None
+
+    model_config = ConfigDict(from_attributes=True)

@@ -18,7 +18,10 @@ from src.modules import (
     ConversationCreate, ConversationDetailResponse, ConversationListItemResponse,
     ConversationPartnerResponse, MessageAttachmentResponse, MessageResponseItem,
     MessageCreate, PaginatedMessagesResponse, ProductSummaryResponse, MessageResponse,
-    ReviewProductConversation, ReviewCreate, ReviewResponse, SellerReviewsResponse, UserSummaryResponse
+    ReviewProductConversation, ReviewCreate, ReviewResponse, SellerReviewsResponse, UserSummaryResponse,
+    Follow, Notification,
+    PotentialBuyerResponse, FollowToggleResponse, FollowStatusResponse, NotificationResponse,
+    manager
 )
 
 def get_user_display_name (user: Optional[User]):
@@ -140,7 +143,7 @@ def check_favorite_status (user_id: int, product_id: int, db: Session):
 # TASK T3: PHÂN HỆ BÌNH LUẬN ĐA CẤP (NESTED COMMENTS: AC-4, AC-5, AC-6, AC-7)
 # ==============================================================================
 
-def create_product_comment(
+async def create_product_comment(
     user_id: int,
     product_id: int,
     form: CommentCreate,
@@ -152,6 +155,7 @@ def create_product_comment(
     - parent_id phải trỏ tới một comment hợp lệ của cùng sản phẩm.
     - Giới hạn độ sâu 2 cấp: Nếu reply vào một comment con cấp 2, hệ thống tự động
       gán parent_id trỏ về comment gốc để giữ giao diện phẳng 2 tầng.
+    - Tự động tạo Notification và Push Real-time (Seq 16 Giai đoạn 1 & 3).
     - Covers: AC-4, AC-5
     """
     # 1. Kiểm tra sản phẩm tồn tại và chưa bị xóa mềm
@@ -177,6 +181,7 @@ def create_product_comment(
 
     # 3. Xử lý parent_id (Logic phân cấp 2 tầng theo BR-2)
     final_parent_id: Optional[int] = None
+    target_parent_comment: Optional[Comment] = None
 
     if form.parent_id is not None:
         parent_comment = db.get(Comment, form.parent_id)
@@ -192,6 +197,7 @@ def create_product_comment(
                 detail="Bình luận phản hồi không thuộc về cùng một sản phẩm."
             )
 
+        target_parent_comment = parent_comment
         # Nếu bình luận cha đã là reply cấp 2 (đã có parent_id), thì gán parent_id về comment gốc
         if parent_comment.parent_id is not None:
             final_parent_id = parent_comment.parent_id
@@ -222,6 +228,57 @@ def create_product_comment(
 
     created_time = getattr(new_comment, 'CreatedAt', getattr(new_comment, 'created_at', datetime.now(timezone.utc)))
     updated_time = getattr(new_comment, 'UpdateAt', getattr(new_comment, 'updated_at', None))
+
+    # 6. Tạo Notification và Push Real-time theo Sequence 16
+    author_name = get_user_display_name(author_user)
+    noti_target_user_id = None
+    noti_title = ""
+    noti_msg = ""
+
+    if final_parent_id is None:
+        # Giai đoạn 1 (Seq 16): Bình luận gốc -> Báo cho Người bán (chủ tin đăng)
+        if user_id != product.seller_id:
+            noti_target_user_id = product.seller_id
+            noti_title = "Có bình luận mới về sản phẩm"
+            noti_msg = f"{author_name} đã bình luận về sản phẩm '{product.title}' của bạn: \"{content_clean[:60]}\""
+    else:
+        # Giai đoạn 3 (Seq 16): Phản hồi -> Báo cho tác giả của bình luận gốc
+        if target_parent_comment and target_parent_comment.user_id != user_id:
+            noti_target_user_id = target_parent_comment.user_id
+            if user_id == product.seller_id:
+                noti_title = "Người bán đã trả lời bình luận"
+                noti_msg = f"Người bán đã trả lời bình luận của bạn trên sản phẩm '{product.title}': \"{content_clean[:60]}\""
+            else:
+                noti_title = "Có phản hồi mới về bình luận"
+                noti_msg = f"{author_name} đã trả lời bình luận của bạn trên sản phẩm '{product.title}': \"{content_clean[:60]}\""
+
+    if noti_target_user_id:
+        new_noti = Notification(
+            user_id=noti_target_user_id,
+            title=noti_title,
+            message=noti_msg,
+            action_link=f"/product/{product_id}",
+            is_read=False
+        )
+        db.add(new_noti)
+        db.commit()
+        db.refresh(new_noti)
+
+        try:
+            await manager.send_to_user(noti_target_user_id, {
+                "type": "new_notification",
+                "data": {
+                    "notification_id": new_noti.notification_id,
+                    "title": new_noti.title,
+                    "message": new_noti.message,
+                    "action_link": new_noti.action_link,
+                    "is_read": False,
+                    "tag": "new_comment",
+                    "product_id": product_id
+                }
+            })
+        except Exception:
+            pass
 
     return CommentItemResponse(
         comment_id=new_comment.comment_id,
@@ -1195,4 +1252,257 @@ def get_seller_reviews(
         page_size=page_size,
         reviews=items
     )
+
+
+# ==============================================================================
+# POTENTIAL BUYERS, FOLLOW & REAL-TIME NOTIFICATION SERVICES (SEQ 7, 8, 11)
+# ==============================================================================
+
+def get_potential_buyers_for_product(product_id: int, seller_id: int, db: Session) -> List[PotentialBuyerResponse]:
+    """
+    Lấy danh sách những người mua tiềm năng đã từng chat về sản phẩm (Seq 7 - Bước 1).
+    Chỉ Người bán (chủ tin đăng) mới có quyền gọi API này.
+    """
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy sản phẩm")
+    if product.seller_id != seller_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không phải là chủ sở hữu của tin đăng này")
+
+    stmt = (
+        select(Conversation)
+        .options(
+            selectinload(Conversation.participation).selectinload(Participation.buyer).selectinload(User.profile)
+        )
+        .where(Conversation.product_id == product_id)
+        .order_by(Conversation.last_message_at.desc())
+    )
+    conversations = db.scalars(stmt).all()
+
+    buyers_map: Dict[int, PotentialBuyerResponse] = {}
+    for conv in conversations:
+        for part in conv.participation:
+            buyer_user = part.buyer
+            if buyer_user and buyer_user.id != seller_id and buyer_user.id not in buyers_map:
+                buyers_map[buyer_user.id] = PotentialBuyerResponse(
+                    user_id=buyer_user.id,
+                    full_name=get_user_display_name(buyer_user),
+                    avatar_url=get_user_avatar(buyer_user),
+                    conversation_id=conv.conversation_id,
+                    last_message_at=conv.last_message_at
+                )
+
+    return list(buyers_map.values())
+
+
+async def toggle_follow_user(follower_id: int, followed_id: int, db: Session) -> FollowToggleResponse:
+    """
+    Thực hiện Theo dõi hoặc Hủy theo dõi một người dùng (Seq 11).
+    Tự động tạo Notification và Push Real-time cho người được follow khi bắt đầu theo dõi.
+    """
+    if follower_id == followed_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bạn không thể tự theo dõi chính tài khoản của mình."
+        )
+
+    target_user = db.get(User, followed_id)
+    if not target_user or not target_user.isActive:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Người dùng bạn muốn theo dõi không tồn tại hoặc đã bị khóa."
+        )
+
+    follower_user = db.get(User, follower_id)
+
+    stmt = select(Follow).where(Follow.follower_id == follower_id, Follow.followed_id == followed_id)
+    existing_follow = db.scalars(stmt).first()
+
+    if existing_follow:
+        db.delete(existing_follow)
+        db.commit()
+        is_following = False
+        msg = f"Đã hủy theo dõi {get_user_display_name(target_user)}"
+    else:
+        new_follow = Follow(follower_id=follower_id, followed_id=followed_id)
+        db.add(new_follow)
+
+        # Tạo Notification ("User A vừa theo dõi bạn") gửi cho User B (Seq 11)
+        follower_name = get_user_display_name(follower_user)
+        follow_noti = Notification(
+            user_id=followed_id,
+            title="Có người theo dõi mới",
+            message=f"{follower_name} vừa bắt đầu theo dõi bạn.",
+            action_link=f"/user/{follower_id}",
+            is_read=False
+        )
+        db.add(follow_noti)
+        db.commit()
+        db.refresh(follow_noti)
+
+        is_following = True
+        msg = f"Đã bắt đầu theo dõi {get_user_display_name(target_user)}"
+
+        # (Bất đồng bộ) Push thông báo Real-time cho User B
+        try:
+            await manager.send_to_user(followed_id, {
+                "type": "new_notification",
+                "data": {
+                    "notification_id": follow_noti.notification_id,
+                    "title": follow_noti.title,
+                    "message": follow_noti.message,
+                    "action_link": follow_noti.action_link,
+                    "is_read": False,
+                    "tag": "new_follower"
+                }
+            })
+        except Exception:
+            pass
+
+    stmt_count = select(func.count()).select_from(Follow).where(Follow.followed_id == followed_id)
+    total_followers = db.scalar(stmt_count) or 0
+
+    return FollowToggleResponse(
+        followed_id=followed_id,
+        is_following=is_following,
+        message=msg,
+        total_followers=total_followers
+    )
+
+
+def check_follow_status(current_user_id: Optional[int], target_user_id: int, db: Session) -> FollowStatusResponse:
+    """Kiểm tra xem current_user có đang theo dõi target_user không kèm số lượng follower/following"""
+    target_user = db.get(User, target_user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    is_following = False
+    if current_user_id and current_user_id != target_user_id:
+        stmt = select(Follow).where(Follow.follower_id == current_user_id, Follow.followed_id == target_user_id)
+        is_following = db.scalars(stmt).first() is not None
+
+    stmt_followers = select(func.count()).select_from(Follow).where(Follow.followed_id == target_user_id)
+    stmt_following = select(func.count()).select_from(Follow).where(Follow.follower_id == target_user_id)
+
+    total_followers = db.scalar(stmt_followers) or 0
+    total_following = db.scalar(stmt_following) or 0
+
+    return FollowStatusResponse(
+        user_id=target_user_id,
+        is_following=is_following,
+        total_followers=total_followers,
+        total_following=total_following
+    )
+
+
+async def process_mark_sold_and_notify_buyer(
+    product_id: int,
+    seller_id: int,
+    buyer_id: Optional[int],
+    db: Session
+):
+    """
+    Xử lý toàn vẹn BƯỚC 1 và kích hoạt BƯỚC 2 của Seq 7:
+    1. Cập nhật Product: status_id = 3 (Sold), gán buyer_id.
+    2. Nếu có chọn Buyer: Tạo bản ghi Notification mời đánh giá.
+    3. Đẩy thông báo Real-time (Push Notification) tới Buyer nếu đang Online.
+    """
+    product = db.get(Product, product_id)
+    if not product or product.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy sản phẩm")
+    if product.seller_id != seller_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền thay đổi trạng thái tin này")
+
+    product.status_id = 3  # Sold
+    created_notification = None
+
+    if buyer_id:
+        if buyer_id == seller_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Người bán không thể tự chọn mình làm người mua")
+        
+        buyer_user = db.get(User, buyer_id)
+        if not buyer_user or not buyer_user.isActive:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người mua được chọn không tồn tại hoặc đã bị khóa")
+
+        product.buyer_id = buyer_id
+
+        created_notification = Notification(
+            user_id=buyer_id,
+            title="Mời bạn đánh giá giao dịch",
+            message=f"Bạn vừa hoàn tất mua món đồ '{product.title}'. Hãy để lại đánh giá 1-5 sao cho người bán nhé!",
+            action_link=f"/product/{product_id}?open_review=true",
+            is_read=False
+        )
+        db.add(created_notification)
+
+    db.commit()
+    db.refresh(product)
+    if created_notification:
+        db.refresh(created_notification)
+
+        noti_payload = {
+            "type": "new_notification",
+            "data": {
+                "notification_id": created_notification.notification_id,
+                "title": created_notification.title,
+                "message": created_notification.message,
+                "action_link": created_notification.action_link,
+                "is_read": False,
+                "tag": "review_invitation",
+                "product_id": product_id,
+                "seller_id": seller_id
+            }
+        }
+        await manager.send_to_user(buyer_id, noti_payload)
+
+    return {
+        "message": "Đã cập nhật trạng thái tin thành 'ĐÃ BÁN' và gửi lời mời đánh giá cho người mua.",
+        "product_id": product_id,
+        "status": "Sold",
+        "buyer_id": buyer_id,
+        "notification_sent": created_notification is not None
+    }
+
+
+def get_user_notifications(user_id: int, db: Session, limit: int = 20) -> List[Notification]:
+    """Lấy danh sách thông báo của người dùng (Seq 7 Bước 2, Seq 8)."""
+    stmt = (
+        select(Notification)
+        .where(Notification.user_id == user_id)
+        .order_by(Notification.notification_id.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(stmt).all())
+
+
+def get_unread_notifications_count(user_id: int, db: Session) -> dict:
+    """Đếm số lượng thông báo chưa đọc phục vụ render Badge count chấm đỏ (Seq 8)."""
+    stmt = select(func.count()).select_from(Notification).where(
+        Notification.user_id == user_id,
+        Notification.is_read == False
+    )
+    count = db.scalar(stmt) or 0
+    return {"user_id": user_id, "unread_count": count}
+
+
+def mark_notification_as_read(notification_id: int, user_id: int, db: Session):
+    """Đánh dấu thông báo là đã đọc khi người dùng click (Seq 7 Bước 2, Seq 8)."""
+    noti = db.get(Notification, notification_id)
+    if not noti or noti.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy thông báo")
+    noti.is_read = True
+    db.commit()
+    return {"message": "Đã đánh dấu thông báo là đã đọc"}
+
+
+def mark_all_notifications_as_read(user_id: int, db: Session):
+    """Đánh dấu toàn bộ thông báo của người dùng là đã đọc (Seq 8)."""
+    stmt = (
+        update(Notification)
+        .where(Notification.user_id == user_id, Notification.is_read == False)
+        .values(is_read=True)
+    )
+    db.execute(stmt)
+    db.commit()
+    return {"message": "Đã đánh dấu tất cả thông báo là đã đọc"}
 

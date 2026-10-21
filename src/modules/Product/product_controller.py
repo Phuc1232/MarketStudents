@@ -8,7 +8,8 @@ from src.modules import(User, ProductCreate, ProductUpdate, ProductDetailRespons
 from .services import (
     get_product_by_id, create_new_product, search_products, 
     get_my_product, update_my_product, mark_product_as_sold,
-    get_product_by_id, soft_delete_product, get_all_product
+    soft_delete_product, get_all_product,
+    record_product_view_history, get_popular_search_suggestions
 )
 
 
@@ -58,11 +59,31 @@ def list_products(
 def get_product (user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return get_my_product(user.id,db)
 
-@router.get("/{product_id}", response_model= ProductListItemResponse, status_code=status.HTTP_200_OK)
-def get_this_product (product_id: int, viewer_id: int = None, db: Session = Depends(get_db)):
-    return get_product_by_id(product_id,viewer_id,db)
+@router.get("/search/suggestions", response_model=List[str], status_code=status.HTTP_200_OK)
+def search_suggestions(db: Session = Depends(get_db)):
+    """
+    Lấy danh sách từ khóa tìm kiếm thịnh hành / gợi ý (Seq 14 - Giai đoạn 1).
+    Endpoint công khai (Public) phục vụ render thanh dropdown tìm kiếm.
+    """
+    return get_popular_search_suggestions(db=db)
 
-@router.put("/{product_id}/me", response_model= ProductListItemResponse, status_code=status.HTTP_200_OK)
+@router.get("/{product_id}", response_model=ProductDetailResponse, status_code=status.HTTP_200_OK)
+def get_this_product (product_id: int, db: Session = Depends(get_db)):
+    return get_product_by_id(product_id=product_id, db=db)
+
+@router.post("/{product_id}/view-history", status_code=status.HTTP_200_OK)
+def track_product_view(
+    product_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    API chạy ngầm (Async) lưu lịch sử xem sản phẩm của người dùng đã đăng nhập (Seq 9).
+    Frontend gọi API này sau khi đã render xong giao diện trang chi tiết.
+    """
+    return record_product_view_history(product_id, user.id, db)
+
+@router.put("/{product_id}/me", response_model=ProductDetailResponse, status_code=status.HTTP_200_OK)
 def update_product (product_id: int, form: ProductUpdate,  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return update_my_product(product_id, user.id,form,db)
 

@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone
 from src.Core.database import SessionLocal
 from src.api.deps import get_db
-from src.modules.User.service import get_current_user
+from src.modules.User.service import get_current_user, get_optional_user
 from src.modules.Interaction.connection_manager import manager
 from src.modules import (
     User,
@@ -24,7 +24,11 @@ from src.modules import (
     MessageResponse,
     ReviewCreate,
     ReviewResponse,
-    SellerReviewsResponse
+    SellerReviewsResponse,
+    PotentialBuyerResponse,
+    FollowToggleResponse,
+    FollowStatusResponse,
+    NotificationResponse
 )
 from src.modules.Interaction.services import (
     toggle_favorite_product,
@@ -44,7 +48,15 @@ from src.modules.Interaction.services import (
     mark_websocket_messages_as_read,
     create_review_product,
     get_product_reviews,
-    get_seller_reviews
+    get_seller_reviews,
+    get_potential_buyers_for_product,
+    toggle_follow_user,
+    check_follow_status,
+    process_mark_sold_and_notify_buyer,
+    get_user_notifications,
+    get_unread_notifications_count,
+    mark_notification_as_read,
+    mark_all_notifications_as_read
 )
 
 router = APIRouter(
@@ -80,9 +92,9 @@ def get_status_favorite (product_id: int,user: User =Depends(get_current_user), 
     "/product/{product_id}/comments",
     response_model=CommentItemResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Đăng bình luận mới hoặc phản hồi câu hỏi dưới bài đăng (AC-4, AC-5)"
+    summary="Đăng bình luận mới hoặc phản hồi câu hỏi dưới bài đăng (AC-4, AC-5, Seq 16)"
 )
-def post_comment(
+async def post_comment(
     product_id: int,
     form: CommentCreate,
     user: User = Depends(get_current_user),
@@ -92,8 +104,9 @@ def post_comment(
     - **AC-4**: Nếu `parent_id = None` -> Tạo bình luận gốc mới.
     - **AC-5**: Nếu truyền `parent_id` hợp lệ -> Tạo câu trả lời (Reply).
     - Tự động chuẩn hóa độ sâu tối đa 2 cấp (BR-2).
+    - Tự động tạo Notification và Push Real-time (Seq 16).
     """
-    return create_product_comment(
+    return await create_product_comment(
         user_id=user.id,
         product_id=product_id,
         form=form,
@@ -507,4 +520,151 @@ def list_seller_reviews(
         page_size=page_size,
         db=db
     )
+
+
+# ==============================================================================
+# 5. POTENTIAL BUYERS, MARK SOLD & NOTIFICATIONS (SEQ 7, 8)
+# ==============================================================================
+
+@router.get(
+    "/product/{product_id}/potential-buyers",
+    response_model=List[PotentialBuyerResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Lấy danh sách người đã chat về sản phẩm để chọn người mua khi Đánh dấu Đã bán (Seq 7)"
+)
+def list_potential_buyers(
+    product_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Phục vụ Popup khi người bán bấm 'Đánh dấu Đã bán' (Seq 7 - Bước 1).
+    Chỉ trả về danh sách đối với chính chủ người bán của sản phẩm.
+    """
+    return get_potential_buyers_for_product(product_id=product_id, seller_id=user.id, db=db)
+
+
+@router.patch(
+    "/product/{product_id}/mark-sold",
+    status_code=status.HTTP_200_OK,
+    summary="Đánh dấu tin đã bán, chọn người mua và gửi thông báo đánh giá (Seq 7 - Bước 1 & 2)"
+)
+async def mark_sold_and_request_review(
+    product_id: int,
+    buyer_id: Optional[int] = Query(None, description="ID người mua được chọn từ danh sách potential-buyers"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Thực hiện trọn vẹn luồng Seq 7:
+    - Cập nhật trạng thái tin thành Sold.
+    - Tạo Notification mời đánh giá gửi người mua.
+    - Push Real-time WebSocket sang cho Người mua để kích hoạt Form đánh giá (Bước 2).
+    """
+    return await process_mark_sold_and_notify_buyer(
+        product_id=product_id,
+        seller_id=user.id,
+        buyer_id=buyer_id,
+        db=db
+    )
+
+
+@router.get(
+    "/notifications/me",
+    response_model=List[NotificationResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Lấy danh sách thông báo của tôi (Seq 7 Bước 2, Seq 8)"
+)
+def get_my_notifications(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Lấy danh sách thông báo để hiển thị danh sách lời mời đánh giá, bình luận, follow (Seq 7, 8).
+    """
+    return get_user_notifications(user_id=user.id, db=db)
+
+
+@router.get(
+    "/notifications/unread-count",
+    status_code=status.HTTP_200_OK,
+    summary="Lấy số lượng thông báo chưa đọc để hiển thị Badge count chấm đỏ (Seq 8)"
+)
+def get_unread_count(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Phục vụ render số huy hiệu đỏ trên icon quả chuông thanh Header (Seq 8).
+    """
+    return get_unread_notifications_count(user_id=user.id, db=db)
+
+
+@router.patch(
+    "/notifications/{notification_id}/read",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Đánh dấu thông báo là đã đọc khi click mở (Seq 7 Bước 2, Seq 8)"
+)
+def mark_notification_read(
+    notification_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return mark_notification_as_read(notification_id=notification_id, user_id=user.id, db=db)
+
+
+@router.patch(
+    "/notifications/read-all",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Đánh dấu toàn bộ thông báo của tôi là đã đọc (Seq 8)"
+)
+def mark_all_read(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return mark_all_notifications_as_read(user_id=user.id, db=db)
+
+
+# ==============================================================================
+# 6. USER FOLLOW / UNFOLLOW TOGGLE & STATUS (SEQ 11)
+# ==============================================================================
+
+@router.post(
+    "/user/{target_user_id}/follow",
+    response_model=FollowToggleResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Theo dõi hoặc Bỏ theo dõi một người dùng (Follow Toggle - Seq 11)"
+)
+async def follow_user_endpoint(
+    target_user_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cơ chế đảo trạng thái theo dõi (Seq 11):
+    - Nếu chưa follow -> Bắt đầu theo dõi, tạo Notification và Push WebSocket cho người được follow.
+    - Nếu đã follow -> Hủy theo dõi (trả về is_following: false).
+    """
+    return await toggle_follow_user(follower_id=user.id, followed_id=target_user_id, db=db)
+
+
+@router.get(
+    "/user/{target_user_id}/follow-status",
+    response_model=FollowStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Kiểm tra trạng thái theo dõi và tổng số lượt followers/following"
+)
+def get_follow_status_endpoint(
+    target_user_id: int,
+    user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Kiểm tra trạng thái follow khi truy cập trang cá nhân của người bán (Seq 11).
+    """
+    current_uid = user.id if user else None
+    return check_follow_status(current_user_id=current_uid, target_user_id=target_user_id, db=db)
+
 

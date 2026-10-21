@@ -248,4 +248,43 @@ class WSPongEvent(BaseModel):
 
 class WSErrorEvent(BaseModel):
     type: str = "error"
-    message: str
+    message: str
+
+
+# ==============================================================================
+# 6. POTENTIAL BUYERS, FOLLOW & NOTIFICATIONS SCHEMAS (SEQ 7, 8, 11)
+# ==============================================================================
+
+class PotentialBuyerResponse(BaseModel):
+    user_id: int
+    full_name: str
+    avatar_url: Optional[str] = None
+    conversation_id: int
+    last_message_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FollowToggleResponse(BaseModel):
+    followed_id: int
+    is_following: bool
+    message: str
+    total_followers: int
+
+
+class FollowStatusResponse(BaseModel):
+    user_id: int
+    is_following: bool
+    total_followers: int
+    total_following: int
+
+
+class NotificationResponse(BaseModel):
+    notification_id: int
+    user_id: int
+    title: str
+    message: Optional[str] = None
+    action_link: Optional[str] = None
+    is_read: bool
+
+    model_config = ConfigDict(from_attributes=True)
