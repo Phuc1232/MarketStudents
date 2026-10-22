@@ -73,6 +73,44 @@ class ConnectionManager:
                     f"Còn lại: {len(self.active_rooms[conversation_id])} kết nối."
                 )
 
+    # --------------------------------------------------------------------------
+    # QUẢN LÝ KẾT NỐI KÊNH THÔNG BÁO TOÀN CỤC (GLOBAL NOTIFICATIONS: TASK T8)
+    # --------------------------------------------------------------------------
+
+    async def connect_user_notifications(self, websocket: WebSocket, user_id: int) -> None:
+        """
+        Chấp thuận kết nối WebSocket thông báo toàn cục (Handshake 101)
+        và đưa socket vào danh sách lắng nghe sự kiện của user_id.
+        Hỗ trợ đa thiết bị: Một user có thể đăng nhập nhiều tab/thiết bị cùng lúc.
+        """
+        await websocket.accept()
+        if user_id not in self.user_sockets:
+            self.user_sockets[user_id] = []
+
+        self.user_sockets[user_id].append(websocket)
+        logger.info(
+            f"[WS NOTIFICATION CONNECT] User #{user_id} đã kết nối kênh thông báo toàn cục. "
+            f"Tổng thiết bị/tab đang online của user này: {len(self.user_sockets[user_id])}"
+        )
+
+    def disconnect_user_notifications(self, websocket: WebSocket, user_id: int) -> None:
+        """
+        Dọn dẹp tài nguyên khi client đóng tab hoặc ngắt kết nối kênh thông báo toàn cục.
+        Nếu user không còn kết nối nào thì xóa key khỏi self.user_sockets để chống rò rỉ RAM.
+        """
+        if user_id in self.user_sockets:
+            if websocket in self.user_sockets[user_id]:
+                self.user_sockets[user_id].remove(websocket)
+
+            if not self.user_sockets[user_id]:
+                del self.user_sockets[user_id]
+                logger.info(f"[WS NOTIFICATION OFFLINE] User #{user_id} đã offline hoàn toàn kênh thông báo.")
+            else:
+                logger.info(
+                    f"[WS NOTIFICATION DISCONNECT] User #{user_id} đóng 1 tab thông báo. "
+                    f"Còn lại: {len(self.user_sockets[user_id])} tab online."
+                )
+
     async def send_to_user(self, user_id: int, message: dict) -> bool:
         """
         Đẩy dữ liệu Real-time tới một user cụ thể nếu user đó đang online bất kỳ tab/thiết bị nào (Seq 7, 8).
@@ -81,18 +119,21 @@ class ConnectionManager:
         if user_id not in self.user_sockets or not self.user_sockets[user_id]:
             return False
 
-        dead_sockets = []
+        dead_sockets: List[WebSocket] = []
         sent = False
         for socket in list(self.user_sockets[user_id]):
             try:
                 await socket.send_json(message)
                 sent = True
-            except Exception:
+            except Exception as e:
+                logger.warning(f"[WS PUSH ERROR] Socket user #{user_id} bị đứt ngầm: {str(e)}")
                 dead_sockets.append(socket)
 
         for dead in dead_sockets:
-            if dead in self.user_sockets[user_id]:
+            if dead in self.user_sockets.get(user_id, []):
                 self.user_sockets[user_id].remove(dead)
+        if user_id in self.user_sockets and not self.user_sockets[user_id]:
+            del self.user_sockets[user_id]
 
         return sent
 

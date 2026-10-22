@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # ==============================================================================
@@ -287,4 +287,47 @@ class NotificationResponse(BaseModel):
     action_link: Optional[str] = None
     is_read: bool
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==============================================================================
+# 7. GLOBAL NOTIFICATION WEBSOCKET SCHEMAS (TASK T8)
+# ==============================================================================
+
+class WSNotificationIncomingPayload(BaseModel):
+    """
+    Payload Client gửi lên Server qua kênh Notification WebSocket.
+    Ví dụ:
+      - Heartbeat giữ kết nối: {"action": "ping"} hoặc {"type": "ping"}
+      - Đánh dấu đã đọc thông báo: {"action": "mark_read", "notification_id": 123}
+      - Đánh dấu đọc tất cả: {"action": "mark_read_all"}
+    """
+    action: Optional[str] = Field(None, description="Hành động: 'ping', 'mark_read', 'mark_read_all'")
+    type: Optional[str] = Field(None, description="Alias cho action: 'ping', 'mark_read', 'mark_read_all'")
+    notification_id: Optional[int] = Field(None, description="ID thông báo cần đánh dấu đã đọc")
+
+
+class WSNotificationData(BaseModel):
+    notification_id: int
+    title: str
+    message: Optional[str] = None
+    action_link: Optional[str] = None
+    is_read: bool = False
+    tag: Optional[str] = None
+    product_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WSNotificationEvent(BaseModel):
+    """Sự kiện Server bắn xuống Client khi có thông báo mới"""
+    type: str = "new_notification"
+    data: WSNotificationData
+    unread_count: Optional[int] = None
+
+
+class WSNotificationPongEvent(BaseModel):
+    """Phản hồi nhịp tim giữ kết nối sống"""
+    type: str = "pong"
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

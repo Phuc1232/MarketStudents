@@ -28,7 +28,8 @@ from src.modules import (
     PotentialBuyerResponse,
     FollowToggleResponse,
     FollowStatusResponse,
-    NotificationResponse
+    NotificationResponse,
+    Notification
 )
 from src.modules.Interaction.services import (
     toggle_favorite_product,
@@ -666,5 +667,113 @@ def get_follow_status_endpoint(
     """
     current_uid = user.id if user else None
     return check_follow_status(current_user_id=current_uid, target_user_id=target_user_id, db=db)
+
+
+# ==============================================================================
+# 7. GLOBAL NOTIFICATION WEBSOCKET ENDPOINT (TASK T8: TOÀN BỘ SỰ KIỆN REAL-TIME)
+# ==============================================================================
+
+@router.websocket("/ws/notifications")
+async def websocket_notifications_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None, description="JWT Bearer Token truyền qua Query Param")
+):
+    """
+    Kênh WebSocket tiếp nhận thông báo thời gian thực toàn sàn UniMarket (Task T8).
+    - URL kết nối: ws://localhost:8000/interaction/ws/notifications?token={jwt_token}
+    - Mục đích:
+      + Nhận thông báo nảy chuông khi có bình luận mới về bài đăng của mình.
+      + Nhận thông báo khi có người trả lời bình luận của mình.
+      + Nhận thông báo khi có người theo dõi gian hàng của mình.
+      + Nhận thông báo khi tin đăng được duyệt, hoặc đơn hàng đổi trạng thái.
+    - Cơ chế bảo mật:
+      + Đóng kết nối mã 4401 (Unauthorized) nếu thiếu token, sai token hoặc token hết hạn.
+      + Sử dụng DB Session ngắn hạn (Short-lived) trong quá trình handshake để không chiếm pool.
+    - Cơ chế giao tiếp:
+      + Client -> Server: {"action": "ping"} (Heartbeat) hoặc {"type": "ping"}
+      + Client -> Server: {"action": "mark_read", "notification_id": 123}
+      + Client -> Server: {"action": "mark_read_all"}
+      + Server -> Client: {"type": "new_notification", "data": {...}}
+      + Server -> Client: {"type": "pong", "timestamp": "..."}
+    """
+    # --------------------------------------------------------------------------
+    # 1. BẢO MẬT & XÁC THỰC HANDSHAKE
+    # --------------------------------------------------------------------------
+    with SessionLocal() as db:
+        user = authenticate_ws_token(token, db)
+        if not user:
+            # Token không hợp lệ -> Đóng kết nối với mã RFC 4401
+            await websocket.close(code=4401)
+            return
+
+    user_id = user.id
+
+    # --------------------------------------------------------------------------
+    # 2. CHẤP THUẬN KẾT NỐI VÀ ĐĂNG KÝ VÀO CONNECTION MANAGER
+    # --------------------------------------------------------------------------
+    await manager.connect_user_notifications(websocket, user_id)
+
+    # --------------------------------------------------------------------------
+    # 3. VÒNG LẶP LẮNG NGHE TIMEOUT & TIN NHẮN TỪ CLIENT
+    # --------------------------------------------------------------------------
+    try:
+        while True:
+            raw_text = await websocket.receive_text()
+            try:
+                payload = json.loads(raw_text)
+            except Exception:
+                await manager.send_personal_message(websocket, {
+                    "type": "error",
+                    "message": "Dữ liệu gửi lên phải là định dạng JSON hợp lệ."
+                })
+                continue
+
+            if not isinstance(payload, dict):
+                await manager.send_personal_message(websocket, {
+                    "type": "error",
+                    "message": "Payload JSON phải là một Object."
+                })
+                continue
+
+            action = payload.get("action") or payload.get("type")
+
+            # Xử lý Heartbeat Ping từ Client
+            if action == "ping":
+                await manager.send_personal_message(websocket, {
+                    "type": "pong",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+
+            # Xử lý Đánh dấu đã đọc thông báo qua WebSocket
+            elif action == "mark_read":
+                noti_id = payload.get("notification_id")
+                if noti_id and isinstance(noti_id, int):
+                    with SessionLocal() as db:
+                        try:
+                            mark_notification_as_read(notification_id=noti_id, user_id=user_id, db=db)
+                            await manager.send_personal_message(websocket, {
+                                "type": "notification_read_ack",
+                                "notification_id": noti_id
+                            })
+                        except Exception:
+                            pass
+
+            elif action == "mark_read_all":
+                with SessionLocal() as db:
+                    try:
+                        mark_all_notifications_as_read(user_id=user_id, db=db)
+                        await manager.send_personal_message(websocket, {
+                            "type": "notification_read_all_ack"
+                        })
+                    except Exception:
+                        pass
+
+    except WebSocketDisconnect:
+        # Client chủ động đóng tab hoặc mất mạng bình thường
+        manager.disconnect_user_notifications(websocket, user_id)
+    except Exception:
+        # Ngoại lệ bất ngờ
+        manager.disconnect_user_notifications(websocket, user_id)
+
 
 
