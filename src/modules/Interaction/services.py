@@ -21,6 +21,8 @@ from src.modules import (
     ReviewProductConversation, ReviewCreate, ReviewResponse, SellerReviewsResponse, UserSummaryResponse,
     Follow, Notification,
     PotentialBuyerResponse, FollowToggleResponse, FollowStatusResponse, NotificationResponse,
+    Report, ReportReason, ReportReasonResponse, ReportCreate, ReportResponse, UserReportHistoryItem,
+    FollowUserItemResponse, PaginatedFollowersResponse,
     manager
 )
 
@@ -1505,4 +1507,236 @@ def mark_all_notifications_as_read(user_id: int, db: Session):
     db.execute(stmt)
     db.commit()
     return {"message": "Đã đánh dấu tất cả thông báo là đã đọc"}
+
+
+# ==============================================================================
+# REPORT SERVICES (SEQ 5, SRS USE CASE 2.4)
+# ==============================================================================
+
+def get_all_report_reasons(db: Session):
+    """
+    Lấy danh sách tất cả lý do báo cáo chuẩn hóa từ CSDL (Public).
+    """
+    stmt = select(ReportReason).order_by(ReportReason.reason_id.asc())
+    return db.scalars(stmt).all()
+
+
+def create_user_report(
+    reporter_id: int,
+    form: ReportCreate,
+    db: Session
+) -> ReportResponse:
+    """
+    Xử lý gửi báo cáo vi phạm từ người dùng với đầy đủ kiểm tra nghiệp vụ và chống spam.
+    """
+    # 1. Kiểm tra lý do báo cáo có tồn tại trong hệ thống không
+    reason = db.get(ReportReason, form.reason_id)
+    if not reason:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lý do báo cáo ID {form.reason_id} không tồn tại trong danh mục."
+        )
+
+    # 2. Kiểm tra sự tồn tại của đối tượng bị báo cáo & Chặn tự tố cáo chính mình
+    if form.target_type == "Product":
+        product = db.get(Product, form.target_id)
+        if not product or product.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sản phẩm bị tố cáo không tồn tại hoặc đã bị xóa.")
+        if product.seller_id == reporter_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bạn không thể tự gửi báo cáo vi phạm tin đăng của chính mình.")
+
+    elif form.target_type == "User":
+        if form.target_id == reporter_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bạn không thể tự gửi báo cáo tài khoản của chính mình.")
+        target_user = db.get(User, form.target_id)
+        if not target_user or not target_user.isActive:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng bị tố cáo không tồn tại hoặc đã bị khóa.")
+
+    elif form.target_type == "Comment":
+        comment = db.get(Comment, form.target_id)
+        if not comment:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bình luận bị tố cáo không tồn tại.")
+        if comment.user_id == reporter_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bạn không thể tự gửi báo cáo bình luận của chính mình.")
+
+    # 3. Kiểm tra chống Spam (Nếu đã có báo cáo Pending cho cùng đối tượng)
+    stmt_check = select(Report).where(
+        Report.reporter_id == reporter_id,
+        Report.target_type == form.target_type,
+        Report.target_id == form.target_id,
+        Report.status == "Pending"
+    )
+    existing_pending = db.scalars(stmt_check).first()
+    if existing_pending:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bạn đã gửi một báo cáo cho đối tượng này và đang chờ Ban quản trị duyệt. Vui lòng không gửi trùng lặp."
+        )
+
+    # 4. Tạo bản ghi Report mới
+    new_report = Report(
+        reporter_id=reporter_id,
+        reason_id=form.reason_id,
+        target_type=form.target_type,
+        target_id=form.target_id,
+        status="Pending"
+    )
+    db.add(new_report)
+    db.commit()
+    db.refresh(new_report)
+
+    created_time = getattr(
+        new_report,
+        'CreatedAt',
+        getattr(new_report, 'created_at', datetime.now(timezone.utc))
+    )
+
+    return ReportResponse(
+        report_id=new_report.report_id,
+        reporter_id=new_report.reporter_id,
+        target_type=new_report.target_type,
+        target_id=new_report.target_id,
+        reason=ReportReasonResponse.model_validate(reason),
+        status=new_report.status,
+        created_at=created_time,
+        message="Cảm ơn bạn đã gửi báo cáo. Ban quản trị sẽ kiểm duyệt nội dung trong vòng 24h để giữ môi trường chợ sinh viên an toàn!"
+    )
+
+
+def get_my_submitted_reports(user_id: int, db: Session) -> List[UserReportHistoryItem]:
+    """Xem lại lịch sử các báo cáo do chính người dùng gửi và trạng thái xử lý"""
+    stmt = (
+        select(Report)
+        .options(selectinload(Report.reason))
+        .where(Report.reporter_id == user_id)
+        .order_by(Report.report_id.desc())
+    )
+    reports = db.scalars(stmt).all()
+
+    items: List[UserReportHistoryItem] = []
+    for rep in reports:
+        created_time = getattr(rep, 'CreatedAt', getattr(rep, 'created_at', datetime.now(timezone.utc)))
+        items.append(
+            UserReportHistoryItem(
+                report_id=rep.report_id,
+                target_type=rep.target_type,
+                target_id=rep.target_id,
+                reason_content=rep.reason.content if rep.reason else "Khác",
+                status=rep.status,
+                created_at=created_time
+            )
+        )
+    return items
+
+
+# ==============================================================================
+# FOLLOWERS & FOLLOWING SERVICES (SEQ 11)
+# ==============================================================================
+
+def get_user_followers_list(
+    target_user_id: int,
+    current_user_id: Optional[int],
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = None
+) -> PaginatedFollowersResponse:
+    """
+    Lấy danh sách chi tiết những người đang theo dõi target_user_id (Followers).
+    """
+    target = db.get(User, target_user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại.")
+
+    stmt_base = (
+        select(Follow)
+        .options(selectinload(Follow.follower).selectinload(User.profile))
+        .where(Follow.followed_id == target_user_id)
+        .order_by(Follow.created_at.desc())
+    )
+
+    stmt_count = select(func.count()).select_from(Follow).where(Follow.followed_id == target_user_id)
+    total = db.scalar(stmt_count) or 0
+
+    offset = (page - 1) * page_size
+    follows = db.scalars(stmt_base.offset(offset).limit(page_size)).all()
+
+    following_ids_set = set()
+    if current_user_id:
+        stmt_my_following = select(Follow.followed_id).where(Follow.follower_id == current_user_id)
+        following_ids_set = set(db.scalars(stmt_my_following).all())
+
+    items: List[FollowUserItemResponse] = []
+    for f in follows:
+        user_obj = f.follower
+        items.append(
+            FollowUserItemResponse(
+                user_id=user_obj.id,
+                full_name=get_user_display_name(user_obj),
+                avatar_url=get_user_avatar(user_obj),
+                bio=user_obj.profile.bio if user_obj.profile else None,
+                followed_at=f.created_at or datetime.now(timezone.utc),
+                is_following_back=(user_obj.id in following_ids_set)
+            )
+        )
+
+    return PaginatedFollowersResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items
+    )
+
+
+def get_user_following_list(
+    target_user_id: int,
+    current_user_id: Optional[int],
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = None
+) -> PaginatedFollowersResponse:
+    """
+    Lấy danh sách chi tiết những người mà target_user_id đang theo dõi (Following).
+    """
+    target = db.get(User, target_user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại.")
+
+    stmt_base = (
+        select(Follow)
+        .options(selectinload(Follow.followed).selectinload(User.profile))
+        .where(Follow.follower_id == target_user_id)
+        .order_by(Follow.created_at.desc())
+    )
+
+    stmt_count = select(func.count()).select_from(Follow).where(Follow.follower_id == target_user_id)
+    total = db.scalar(stmt_count) or 0
+
+    offset = (page - 1) * page_size
+    follows = db.scalars(stmt_base.offset(offset).limit(page_size)).all()
+
+    following_ids_set = set()
+    if current_user_id:
+        stmt_my_following = select(Follow.followed_id).where(Follow.follower_id == current_user_id)
+        following_ids_set = set(db.scalars(stmt_my_following).all())
+
+    items: List[FollowUserItemResponse] = []
+    for f in follows:
+        user_obj = f.followed
+        items.append(
+            FollowUserItemResponse(
+                user_id=user_obj.id,
+                full_name=get_user_display_name(user_obj),
+                avatar_url=get_user_avatar(user_obj),
+                bio=user_obj.profile.bio if user_obj.profile else None,
+                followed_at=f.created_at or datetime.now(timezone.utc),
+                is_following_back=(user_obj.id in following_ids_set)
+            )
+        )
+
+    return PaginatedFollowersResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items
+    )
 

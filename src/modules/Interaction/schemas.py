@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime, timezone
 
 
@@ -330,4 +330,84 @@ class WSNotificationEvent(BaseModel):
 class WSNotificationPongEvent(BaseModel):
     """Phản hồi nhịp tim giữ kết nối sống"""
     type: str = "pong"
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ==============================================================================
+# 8. REPORT (BÁO CÁO VI PHẠM) SCHEMAS (SEQ 5, USE CASE 2.4)
+# ==============================================================================
+
+class ReportReasonResponse(BaseModel):
+    """Danh mục lý do báo cáo chuẩn hóa phục vụ render Dropdown/Radio buttons"""
+    reason_id: int
+    content: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReportCreate(BaseModel):
+    """Payload người dùng gửi phiếu tố cáo vi phạm"""
+    target_type: Literal["Product", "User", "Comment"] = Field(
+        ...,
+        description="Loại đối tượng bị tố cáo: 'Product' (Tin đăng), 'User' (Người dùng), 'Comment' (Bình luận)"
+    )
+    target_id: int = Field(..., ge=1, description="ID của tin đăng, người dùng hoặc bình luận bị tố cáo")
+    reason_id: int = Field(..., ge=1, description="ID lý do báo cáo chuẩn hóa từ danh mục")
+    description: Optional[str] = Field(
+        None,
+        max_length=1000,
+        description="Mô tả chi tiết bằng chứng hoặc nội dung vi phạm (tùy chọn)"
+    )
+
+
+class ReportResponse(BaseModel):
+    """Thông tin phản hồi sau khi gửi báo cáo thành công"""
+    report_id: int
+    reporter_id: int
+    target_type: str
+    target_id: int
+    reason: ReportReasonResponse
+    status: str
+    created_at: datetime
+    message: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserReportHistoryItem(BaseModel):
+    """Lịch sử báo cáo của người dùng hiện tại"""
+    report_id: int
+    target_type: str
+    target_id: int
+    reason_content: str
+    status: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==============================================================================
+# 9. FOLLOWERS & FOLLOWING DETAIL SCHEMAS (SEQ 11)
+# ==============================================================================
+
+class FollowUserItemResponse(BaseModel):
+    user_id: int
+    full_name: str
+    avatar_url: Optional[str] = None
+    bio: Optional[str] = None
+    followed_at: datetime
+    is_following_back: bool = Field(
+        False,
+        description="Người đang đăng nhập (Current User) có đang theo dõi người này không"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedFollowersResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[FollowUserItemResponse]
+
+    model_config = ConfigDict(from_attributes=True)

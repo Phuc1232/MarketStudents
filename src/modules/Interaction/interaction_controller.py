@@ -29,7 +29,13 @@ from src.modules import (
     FollowToggleResponse,
     FollowStatusResponse,
     NotificationResponse,
-    Notification
+    Notification,
+    ReportReasonResponse,
+    ReportCreate,
+    ReportResponse,
+    UserReportHistoryItem,
+    FollowUserItemResponse,
+    PaginatedFollowersResponse
 )
 from src.modules.Interaction.services import (
     toggle_favorite_product,
@@ -57,7 +63,12 @@ from src.modules.Interaction.services import (
     get_user_notifications,
     get_unread_notifications_count,
     mark_notification_as_read,
-    mark_all_notifications_as_read
+    mark_all_notifications_as_read,
+    get_all_report_reasons,
+    create_user_report,
+    get_my_submitted_reports,
+    get_user_followers_list,
+    get_user_following_list
 )
 
 router = APIRouter(
@@ -774,6 +785,113 @@ async def websocket_notifications_endpoint(
     except Exception:
         # Ngoại lệ bất ngờ
         manager.disconnect_user_notifications(websocket, user_id)
+
+
+# ==============================================================================
+# REPORT ENDPOINTS (SEQ 5, SRS USE CASE 2.4)
+# ==============================================================================
+
+@router.get(
+    "/report-reasons",
+    response_model=List[ReportReasonResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Lấy danh mục lý do báo cáo chuẩn hóa (Public - Seq 5)"
+)
+def get_report_reasons(db: Session = Depends(get_db)):
+    """
+    Trả về danh sách các lý do vi phạm (hàng giả, lừa đảo, ngôn từ thù địch...)
+    để Frontend render danh sách chọn khi người dùng bấm nút Báo cáo.
+    """
+    return get_all_report_reasons(db)
+
+
+@router.post(
+    "/reports",
+    response_model=ReportResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Gửi phiếu tố cáo vi phạm sản phẩm/người dùng/bình luận (Seq 5)"
+)
+def submit_report(
+    form: ReportCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cho phép người dùng gửi tố cáo vi phạm.
+    - Chống spam: Không cho gửi trùng lặp nếu báo cáo trước đó đang 'Pending'.
+    - Chặn tự tố cáo chính mình.
+    """
+    return create_user_report(
+        reporter_id=user.id,
+        form=form,
+        db=db
+    )
+
+
+@router.get(
+    "/reports/me",
+    response_model=List[UserReportHistoryItem],
+    status_code=status.HTTP_200_OK,
+    summary="Xem lịch sử các báo cáo tôi đã gửi và tiến độ xử lý của Admin"
+)
+def get_my_reports(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Người dùng theo dõi trạng thái xử lý các khiếu nại mình từng gửi (Pending, Resolved, Rejected).
+    """
+    return get_my_submitted_reports(user_id=user.id, db=db)
+
+
+# ==============================================================================
+# FOLLOWERS & FOLLOWING ENDPOINTS (SEQ 11)
+# ==============================================================================
+
+@router.get(
+    "/user/{user_id}/followers",
+    response_model=PaginatedFollowersResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Lấy danh sách chi tiết những người đang theo dõi người dùng này (Followers - Seq 11)"
+)
+def list_user_followers(
+    user_id: int,
+    page: int = Query(1, ge=1, description="Số trang hiện tại"),
+    page_size: int = Query(20, ge=1, le=100, description="Số người mỗi trang"),
+    user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
+    current_uid = user.id if user else None
+    return get_user_followers_list(
+        target_user_id=user_id,
+        current_user_id=current_uid,
+        page=page,
+        page_size=page_size,
+        db=db
+    )
+
+
+@router.get(
+    "/user/{user_id}/following",
+    response_model=PaginatedFollowersResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Lấy danh sách chi tiết những người mà người dùng này đang theo dõi (Following - Seq 11)"
+)
+def list_user_following(
+    user_id: int,
+    page: int = Query(1, ge=1, description="Số trang hiện tại"),
+    page_size: int = Query(20, ge=1, le=100, description="Số người mỗi trang"),
+    user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
+    current_uid = user.id if user else None
+    return get_user_following_list(
+        target_user_id=user_id,
+        current_user_id=current_uid,
+        page=page,
+        page_size=page_size,
+        db=db
+    )
 
 
 

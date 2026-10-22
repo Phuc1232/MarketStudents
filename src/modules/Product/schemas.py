@@ -111,3 +111,34 @@ class PaginatedProductsResponse(BaseModel):
     page: int
     page_size: int
     items: List[ProductListItemResponse]
+
+
+# ==============================================================================
+# 5. MY PURCHASES SCHEMAS (SEQ 7 - PHASE 2 EXTENSION)
+# ==============================================================================
+from src.modules.Interaction.schemas import UserSummaryResponse
+
+
+class MyPurchaseItemResponse(BaseModel):
+    product_id: int
+    title: str
+    price: float
+    thumbnail_url: Optional[str] = None
+    condition_name: Optional[str] = None
+    seller: UserSummaryResponse
+    purchased_at: datetime
+    has_reviewed: bool = Field(
+        False,
+        description="Người mua đã gửi đánh giá cho giao dịch sản phẩm này chưa (Seq 7)"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedPurchasesResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[MyPurchaseItemResponse]
+
+    model_config = ConfigDict(from_attributes=True)

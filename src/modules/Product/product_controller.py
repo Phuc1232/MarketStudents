@@ -4,12 +4,13 @@ from typing import Optional, List
 from src.api.deps import get_db
 from src.modules.User.service import get_current_user
 from src.modules import(User, ProductCreate, ProductUpdate, ProductDetailResponse,
-    ProductListItemResponse, PaginatedProductsResponse)
+    ProductListItemResponse, PaginatedProductsResponse, PaginatedPurchasesResponse)
 from .services import (
     get_product_by_id, create_new_product, search_products, 
     get_my_product, update_my_product, mark_product_as_sold,
     soft_delete_product, get_all_product,
-    record_product_view_history, get_popular_search_suggestions
+    record_product_view_history, get_popular_search_suggestions,
+    get_my_purchased_products
 )
 
 
@@ -66,6 +67,31 @@ def search_suggestions(db: Session = Depends(get_db)):
     Endpoint công khai (Public) phục vụ render thanh dropdown tìm kiếm.
     """
     return get_popular_search_suggestions(db=db)
+
+@router.get(
+    "/my-purchases",
+    response_model=PaginatedPurchasesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Xem lịch sử các sản phẩm tôi đã mua thành công kèm trạng thái đánh giá (Seq 7)"
+)
+def get_my_purchases(
+    page: int = Query(1, ge=1, description="Số trang hiện tại"),
+    page_size: int = Query(20, ge=1, le=100, description="Số tin mỗi trang"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Phục vụ màn hình 'Đơn mua của tôi' dành cho Người mua.
+    Trả về cờ `has_reviewed`:
+    - Nếu false: Frontend hiển thị nút '⭐ Đánh giá người bán' (kết nối trực tiếp Bước 2 của Seq 7).
+    - Nếu true: Hiển thị nhãn 'Đã đánh giá'.
+    """
+    return get_my_purchased_products(
+        user_id=user.id,
+        page=page,
+        page_size=page_size,
+        db=db
+    )
 
 @router.get("/{product_id}", response_model=ProductDetailResponse, status_code=status.HTTP_200_OK)
 def get_this_product (product_id: int, db: Session = Depends(get_db)):

@@ -7,8 +7,10 @@ from src.modules import (
     Product, ProductImage, ProductAttribute, ProductStatus,
     ProductCondition, ProductView, SubCategory, Category,
     User, Address, MasterDistrict, MasterWard, ProductCreate, ProductUpdate,
-    SavedSearch
+    SavedSearch, ReviewProductConversation, UserSummaryResponse,
+    MyPurchaseItemResponse, PaginatedPurchasesResponse
 )
+from src.modules.Interaction.services import get_user_display_name, get_user_avatar
 
 def get_all_product (db: Session):
     return db.scalars(select(Product)).all()
@@ -287,5 +289,91 @@ def soft_delete_product(product_id: int, user_id: int, db: Session):
     product.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Đã xóa tin đăng thành công (tin được lưu trong thùng rác 30 ngày)."}
-    
- 
+
+
+# ==============================================================================
+# MY PURCHASES SERVICES (SEQ 7 - PHASE 2 EXTENSION)
+# ==============================================================================
+
+def get_my_purchased_products(
+    user_id: int,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = None
+) -> PaginatedPurchasesResponse:
+    """
+    Lấy danh sách các sản phẩm mà người dùng hiện tại đã mua thành công (buyer_id == user_id).
+    Tự động đối chiếu bảng Review để kiểm tra cờ has_reviewed (Seq 7).
+    """
+    # 1. Query danh sách sản phẩm đã mua
+    stmt_base = (
+        select(Product)
+        .options(
+            selectinload(Product.seller).selectinload(User.profile),
+            selectinload(Product.images),
+            selectinload(Product.condition)
+        )
+        .where(
+            Product.buyer_id == user_id,
+            Product.deleted_at.is_(None)
+        )
+        .order_by(Product.UpdateAt.desc())
+    )
+
+    # 2. Đếm tổng số
+    stmt_count = select(func.count()).select_from(Product).where(
+        Product.buyer_id == user_id,
+        Product.deleted_at.is_(None)
+    )
+    total = db.scalar(stmt_count) or 0
+
+    # 3. Phân trang
+    offset = (page - 1) * page_size
+    products = db.scalars(stmt_base.offset(offset).limit(page_size)).all()
+
+    # 4. Lấy tập hợp các product_id mà user_id này đã từng gửi đánh giá
+    product_ids = [p.product_id for p in products]
+    reviewed_product_ids = set()
+    if product_ids:
+        stmt_reviews = select(ReviewProductConversation.product_id).where(
+            ReviewProductConversation.reviewer_id == user_id,
+            ReviewProductConversation.product_id.in_(product_ids)
+        )
+        reviewed_product_ids = set(db.scalars(stmt_reviews).all())
+
+    # 5. Đóng gói DTO
+    items: List[MyPurchaseItemResponse] = []
+    for prod in products:
+        seller_obj = prod.seller
+        seller_dto = UserSummaryResponse(
+            user_id=seller_obj.id,
+            full_name=get_user_display_name(seller_obj),
+            avatar_url=get_user_avatar(seller_obj)
+        )
+
+        thumb = prod.thumbnails
+        if not thumb and prod.images:
+            thumb = prod.images[0].image_url
+
+        cond_name = prod.condition.condition_name if prod.condition else None
+        purchased_time = getattr(prod, 'UpdateAt', getattr(prod, 'updated_at', datetime.now(timezone.utc)))
+
+        items.append(
+            MyPurchaseItemResponse(
+                product_id=prod.product_id,
+                title=prod.title,
+                price=prod.price,
+                thumbnail_url=thumb,
+                condition_name=cond_name,
+                seller=seller_dto,
+                purchased_at=purchased_time,
+                has_reviewed=(prod.product_id in reviewed_product_ids)
+            )
+        )
+
+    return PaginatedPurchasesResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items
+    )
