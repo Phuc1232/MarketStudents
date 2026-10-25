@@ -117,7 +117,8 @@ class IdentityVerification(Base):
     __tablename__="identity_verification"
     request_id=Column(INTEGER, primary_key=True, index=True)
     user_id=Column(INTEGER, ForeignKey("user.id"), nullable=False)
-    handle_by_id=Column(INTEGER, ForeignKey("user.id"), nullable=False)
+    handle_by_id=Column(INTEGER, ForeignKey("user.id"), nullable=True)
+    status = Column(String(50), default="PENDING", index= True)
     contact_phone=Column(String, nullable=False)
     other_phone=Column(String, nullable=True)
     cccd_front_url=Column(Text, nullable=False)

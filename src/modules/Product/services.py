@@ -31,10 +31,14 @@ def create_new_product (user_id: int, form: ProductCreate ,db: Session):
     thumb = form.thumbnails
     if not thumb and form.images:
         thumb = form.images[0].image_url
+    # Kiểm tra quyền: Super Admin (role_id = 1) được duyệt ngay; User thường bắt buộc qua Tiền kiểm (Pending_Approval)
+    user_obj = db.get(User, user_id)
+    initial_status_id = 2 if (user_obj and getattr(user_obj, "role_id", None) == 1) else 1
+
     new_pro = Product(
         seller_id=user_id,
         sub_category_id=form.sub_category_id,
-        status_id=2,  # Active
+        status_id=initial_status_id,  # 1: Pending_Approval (Tiền kiểm Gate A) | 2: Active (Admin)
         condition_id=form.condition_id,
         title=form.title.strip(),
         price=form.price,

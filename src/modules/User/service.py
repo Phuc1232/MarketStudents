@@ -134,18 +134,26 @@ def authenticate_user(username: str, password: str ,db: Session= Depends(get_db)
         verify_password(password,dummy_password)
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Sai Tai Khoan Hoac Mat Khau")
     
-    # Kiểm tra tài khoản bị vô hiệu hóa / khóa
-    if not user.isActive:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên hoặc gửi yêu cầu kháng cáo mở khóa!"
-        )
-
-    # Kiểm tra Blacklist theo Seq 1
+    # 1. Kiểm tra tài khoản trong Blacklist
     check_email_blacklisted(user.Email, db)
 
+    # 2. Kiểm tra mật khẩu
     if not verify_password(password, user.PassWord):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Sai Tai Khoan Hoac Mat Khau")
+
+    # 3. Kiểm tra tài khoản bị vô hiệu hóa / khóa
+    if not user.isActive:
+        appeal_expire = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
+        appeal_token = create_access_token({"user_id": user.id, "is_banned": True}, appeal_expire)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "Tài khoản của bạn đã bị khóa do vi phạm quy chế sàn UniMarket.",
+                "error_code": "ACCOUNT_BANNED",
+                "appeal_token": appeal_token,
+                "appeal_instruction": "Vui lòng sử dụng appeal_token này hoặc token đã cấp để gửi hồ sơ kháng cáo CCCD chính chủ tại /identity-verification/appeal."
+            }
+        )
     access_token_expire= timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
     access_token=create_access_token({"user_id":user.id}, access_token_expire)
     
