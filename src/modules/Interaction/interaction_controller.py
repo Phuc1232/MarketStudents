@@ -315,14 +315,16 @@ async def websocket_chat_endpoint(
     with SessionLocal() as db:
         user = authenticate_ws_token(token, db)
         if not user:
-            # Token sai hoặc hết hạn -> Ngắt kết nối với mã 4401 (Unauthorized)
-            await websocket.close(code=4401)
+            # Token sai hoặc hết hạn -> Bắt tay rồi ngắt kết nối với mã 4401 (Unauthorized)
+            await websocket.accept()
+            await websocket.close(code=4401, reason="Unauthorized: Token invalid or expired")
             return
 
         is_member = verify_conversation_member(conversation_id, user.id, db)
         if not is_member:
-            # User không phải Buyer hoặc Seller của hội thoại -> Ngắt kết nối với mã 4403 (Forbidden)
-            await websocket.close(code=4403)
+            # User không phải Buyer hoặc Seller của hội thoại -> Bắt tay rồi ngắt kết nối với mã 4403 (Forbidden)
+            await websocket.accept()
+            await websocket.close(code=4403, reason="Forbidden: Not a member of this conversation")
             return
 
     # --------------------------------------------------------------------------
@@ -665,16 +667,6 @@ async def websocket_notifications_endpoint(
     token: Optional[str] = Query(None, description="JWT Bearer Token truyền qua Query Param")
 ):
     """
-    Kênh WebSocket tiếp nhận thông báo thời gian thực toàn sàn UniMarket (Task T8).
-    - URL kết nối: ws://localhost:8000/interaction/ws/notifications?token={jwt_token}
-    - Mục đích:
-      + Nhận thông báo nảy chuông khi có bình luận mới về bài đăng của mình.
-      + Nhận thông báo khi có người trả lời bình luận của mình.
-      + Nhận thông báo khi có người theo dõi gian hàng của mình.
-      + Nhận thông báo khi tin đăng được duyệt, hoặc đơn hàng đổi trạng thái.
-    - Cơ chế bảo mật:
-      + Đóng kết nối mã 4401 (Unauthorized) nếu thiếu token, sai token hoặc token hết hạn.
-      + Sử dụng DB Session ngắn hạn (Short-lived) trong quá trình handshake để không chiếm pool.
     - Cơ chế giao tiếp:
       + Client -> Server: {"action": "ping"} (Heartbeat) hoặc {"type": "ping"}
       + Client -> Server: {"action": "mark_read", "notification_id": 123}
@@ -688,8 +680,9 @@ async def websocket_notifications_endpoint(
     with SessionLocal() as db:
         user = authenticate_ws_token(token, db)
         if not user:
-            # Token không hợp lệ -> Đóng kết nối với mã RFC 4401
-            await websocket.close(code=4401)
+            # Token không hợp lệ -> Bắt tay rồi đóng kết nối với mã RFC 4401
+            await websocket.accept()
+            await websocket.close(code=4401, reason="Unauthorized: Token invalid or expired")
             return
 
     user_id = user.id
@@ -869,4 +862,4 @@ def list_user_following(
     )
 
 
-
+

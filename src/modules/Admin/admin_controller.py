@@ -97,13 +97,13 @@ def get_product_detail_for_admin(
     status_code=status.HTTP_200_OK,
     summary="Phê duyệt tin đăng sang Active (Staff / Admin)"
 )
-def approve_pending_product(
+async def approve_pending_product(
     product_id: int = Path(..., ge=1, description="ID tin đăng cần phê duyệt"),
     current_user: User = Depends(get_current_staff_or_admin),
     db: Session = Depends(get_db)
 ):
-    """Phê duyệt tin đăng: chuyển `status_id = 2` (Active), thông báo seller, ghi SystemLog."""
-    return approve_product(product_id=product_id, current_admin=current_user, db=db)
+    """Phê duyệt tin đăng: chuyển `status_id = 2` (Active), thông báo seller và đẩy WebSocket, ghi SystemLog."""
+    return await approve_product(product_id=product_id, current_admin=current_user, db=db)
 
 
 @router.patch(
@@ -112,14 +112,14 @@ def approve_pending_product(
     status_code=status.HTTP_200_OK,
     summary="Từ chối tin đăng kèm lý do vi phạm (Staff / Admin)"
 )
-def reject_pending_product(
+async def reject_pending_product(
     product_id: int = Path(..., ge=1, description="ID tin đăng cần từ chối"),
     payload: ProductRejectRequest = ...,
     current_user: User = Depends(get_current_staff_or_admin),
     db: Session = Depends(get_db)
 ):
-    """Từ chối tin đăng: chuyển `status_id = 5` (Rejected), yêu cầu lý do tối thiểu 10 ký tự."""
-    return reject_product(product_id=product_id, payload=payload, current_admin=current_user, db=db)
+    """Từ chối tin đăng: chuyển `status_id = 5` (Rejected), yêu cầu lý do tối thiểu 10 ký tự và đẩy WebSocket."""
+    return await reject_product(product_id=product_id, payload=payload, current_admin=current_user, db=db)
 
 
 @router.delete(
@@ -127,13 +127,13 @@ def reject_pending_product(
     status_code=status.HTTP_200_OK,
     summary="Buộc gỡ bỏ vĩnh viễn tin đăng vi phạm nghiêm trọng (Chỉ Super Admin)"
 )
-def delete_product_by_admin(
+async def delete_product_by_admin(
     product_id: int = Path(..., ge=1, description="ID tin đăng cần gỡ bỏ"),
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Buộc gỡ bỏ bài đăng vi phạm nghiêm trọng (Chỉ Super Admin - BR-ADM-1)."""
-    return admin_delete_product(product_id=product_id, current_admin=current_admin, db=db)
+    return await admin_delete_product(product_id=product_id, current_admin=current_admin, db=db)
 
 
 # ==============================================================================
@@ -181,14 +181,14 @@ def get_report_detail_for_admin(
     status_code=status.HTTP_200_OK,
     summary="Giải quyết tố cáo & áp dụng chế tài xử phạt (Staff / Admin)"
 )
-def resolve_report(
+async def resolve_report(
     report_id: int = Path(..., ge=1, description="ID phiếu tố cáo cần xử lý"),
     payload: ReportResolveRequest = ...,
     current_user: User = Depends(get_current_staff_or_admin),
     db: Session = Depends(get_db)
 ):
     """Giải quyết tố cáo vi phạm theo cơ chế linh hoạt tại Gate A (Seq 5 SRS)."""
-    return resolve_user_report(report_id=report_id, payload=payload, current_admin=current_user, db=db)
+    return await resolve_user_report(report_id=report_id, payload=payload, current_admin=current_user, db=db)
 
 
 @router.post(
@@ -249,7 +249,7 @@ def get_appeal_detail_for_admin(
     status_code=status.HTTP_200_OK,
     summary="Phê duyệt kháng cáo & Tự động mở khóa tài khoản (Admin)"
 )
-def approve_user_appeal(
+async def approve_user_appeal(
     request_id: int = Path(..., ge=1, description="ID hồ sơ kháng cáo"),
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -259,9 +259,9 @@ def approve_user_appeal(
     - Chuyển `status = 'APPROVED'`.
     - Tự động mở khóa tài khoản (`isActive = True`).
     - Gỡ Email và Số điện thoại khỏi `blacklists`.
-    - Gửi thông báo chúc mừng và ghi nhận Audit Trail.
+    - Gửi thông báo chúc mừng, đẩy WebSocket và ghi nhận Audit Trail.
     """
-    return approve_appeal(request_id=request_id, current_admin=current_admin, db=db)
+    return await approve_appeal(request_id=request_id, current_admin=current_admin, db=db)
 
 
 @router.patch(
@@ -270,14 +270,14 @@ def approve_user_appeal(
     status_code=status.HTTP_200_OK,
     summary="Từ chối hồ sơ kháng cáo kèm lý do (Admin)"
 )
-def reject_user_appeal(
+async def reject_user_appeal(
     request_id: int = Path(..., ge=1, description="ID hồ sơ kháng cáo"),
     payload: AppealRejectRequest = ...,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Từ chối kháng cáo: chuyển `status = 'REJECTED'`, giữ nguyên khóa tài khoản và lưu lý do."""
-    return reject_appeal(request_id=request_id, payload=payload, current_admin=current_admin, db=db)
+    """Từ chối kháng cáo: chuyển `status = 'REJECTED'`, giữ nguyên khóa tài khoản, đẩy WebSocket và lưu lý do."""
+    return await reject_appeal(request_id=request_id, payload=payload, current_admin=current_admin, db=db)
 
 
 # ==============================================================================
@@ -325,7 +325,7 @@ def get_user_detail_for_admin(
     status_code=status.HTTP_200_OK,
     summary="Khóa hoặc Mở khóa tài khoản người dùng thủ công (Admin)"
 )
-def update_user_status(
+async def update_user_status(
     user_id: int = Path(..., ge=1, description="ID người dùng"),
     payload: UserStatusUpdateRequest = ...,
     current_admin: User = Depends(get_current_admin),
@@ -333,11 +333,11 @@ def update_user_status(
 ):
     """
     Khóa/mở khóa tài khoản thủ công:
-    - Nếu khóa: Ẩn các tin đăng đang bán, tùy chọn thêm vào Blacklist.
-    - Nếu mở khóa: Gỡ khỏi Blacklist.
+    - Nếu khóa: Ẩn các tin đăng đang bán, tùy chọn thêm vào Blacklist, đẩy WebSocket Force Logout.
+    - Nếu mở khóa: Gỡ khỏi Blacklist, đẩy WebSocket kích hoạt lại.
     - Chặn Admin tự khóa tài khoản của chính mình.
     """
-    return update_user_active_status(user_id=user_id, payload=payload, current_admin=current_admin, db=db)
+    return await update_user_active_status(user_id=user_id, payload=payload, current_admin=current_admin, db=db)
 
 
 @router.patch(
@@ -345,14 +345,14 @@ def update_user_status(
     status_code=status.HTTP_200_OK,
     summary="Phân quyền / hạ quyền nhân viên sàn (Chỉ Super Admin)"
 )
-def change_user_role(
+async def change_user_role(
     user_id: int = Path(..., ge=1, description="ID người dùng cần thay đổi quyền"),
     payload: UserRoleUpdateRequest = ...,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Chỉ Super Admin tối cao (`role_id = 1`) mới có quyền thăng cấp hoặc hạ quyền nhân viên."""
-    return update_user_role(user_id=user_id, payload=payload, current_admin=current_admin, db=db)
+    return await update_user_role(user_id=user_id, payload=payload, current_admin=current_admin, db=db)
 
 
 # ==============================================================================

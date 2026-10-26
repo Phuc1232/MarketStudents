@@ -3,13 +3,12 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select, func, and_, or_, desc
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-
 from src.api.deps import get_db
 from src.modules.User.service import get_current_user
 from src.modules import (
     User, userProfile, userStats, StudentVerification, Role,
     Product, ProductImage, ProductAttribute, ProductStatus, ProductCondition, SubCategory, Category,
-    Report, ReportReason, Notification, SystemLog, Blacklist, IdentityVerification, Comment, Wallet
+    Report, ReportReason, Notification, SystemLog, Blacklist, IdentityVerification, Comment, Wallet, manager
 )
 from src.modules.Interaction.services import get_user_display_name, get_user_avatar
 from .schemas import (
@@ -25,7 +24,9 @@ from .schemas import (
     BlacklistCreateRequest, BlacklistItemResponse, PaginatedBlacklistResponse,
     SystemLogItemResponse, PaginatedSystemLogsResponse, AdminDashboardStatsResponse
 )
+import logging
 
+logger = logging.getLogger(__name__)
 
 # ==============================================================================
 # 1. RBAC AUTHENTICATION & AUTHORIZATION DEPENDENCIES (DEPENDENCY CHAINING)
@@ -111,7 +112,6 @@ def record_system_log(
     db.add(log_entry)
     return log_entry
 
-
 def send_system_notification(
     user_id: int,
     title: str,
@@ -129,6 +129,34 @@ def send_system_notification(
     )
     db.add(notif)
     return notif
+
+
+async def push_realtime_notification_safe(
+    user_id: int,
+    notif: Notification,
+    tag: str = "system",
+    extra_data: Optional[Dict[str, Any]] = None
+) -> bool:
+    try:
+        payload = {
+            "type": "new_notification",
+            "data": {
+                "notification_id": getattr(notif, "notification_id", 0),
+                "title": notif.title,
+                "message": notif.message,
+                "action_link": notif.action_link,
+                "is_read": False,
+                "tag": tag,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+        if extra_data:
+            payload["data"].update(extra_data)
+
+        return await manager.send_to_user(user_id, payload)
+    except Exception as e:
+        logger.warning(f"[WS ADMIN PUSH ERROR] Không thể gửi WebSocket tới User #{user_id}: {str(e)}")
+        return False
 
 
 def _build_admin_seller_dto(seller: Optional[User]) -> AdminSellerSummaryDto:
@@ -335,7 +363,7 @@ def get_admin_product_detail(
     )
 
 
-def approve_product(
+async def approve_product(
     product_id: int,
     current_admin: User,
     db: Session
@@ -344,7 +372,7 @@ def approve_product(
     Phê duyệt tin đăng (Sequence 12 SRS):
     - Kiểm tra tin tồn tại và đang ở trạng thái Pending_Approval (status_id = 1) hoặc Rejected (status_id = 5).
     - Cập nhật status_id = 2 (Active).
-    - Gửi Notification cho người bán.
+    - Gửi Notification và Real-time WebSocket cho người bán.
     - Ghi SystemLog kiểm toán (Approve_Post).
     """
     product = db.get(Product, product_id)
@@ -364,7 +392,7 @@ def approve_product(
     product.status_id = 2  # Active
 
     # Gửi thông báo cho người bán
-    send_system_notification(
+    notif = send_system_notification(
         user_id=product.seller_id,
         title="Tin đăng của bạn đã được phê duyệt!",
         message=f"Chúc mừng bạn! Tin đăng '{product.title}' đã được Ban Quản Trị phê duyệt và hiện đang hiển thị công khai trên UniMarket.",
@@ -381,6 +409,16 @@ def approve_product(
     )
 
     db.commit()
+    db.refresh(notif)
+
+    # Đẩy Real-time WebSocket cho người bán
+    await push_realtime_notification_safe(
+        user_id=product.seller_id,
+        notif=notif,
+        tag="product_approved",
+        extra_data={"product_id": product.product_id}
+    )
+
     return ProductApproveResponse(
         product_id=product.product_id,
         status_id=2,
@@ -390,7 +428,7 @@ def approve_product(
     )
 
 
-def reject_product(
+async def reject_product(
     product_id: int,
     payload: ProductRejectRequest,
     current_admin: User,
@@ -399,7 +437,7 @@ def reject_product(
     """
     Từ chối tin đăng vi phạm (Sequence 12 SRS):
     - Cập nhật status_id = 5 (Rejected).
-    - Gửi Notification kèm lý do chi tiết để người bán chỉnh sửa.
+    - Gửi Notification & Real-time WebSocket kèm lý do chi tiết để người bán chỉnh sửa.
     - Ghi SystemLog kiểm toán (Reject_Post).
     """
     product = db.get(Product, product_id)
@@ -413,7 +451,7 @@ def reject_product(
     product.status_id = 5  # Rejected
 
     # Gửi thông báo cho người bán
-    send_system_notification(
+    notif = send_system_notification(
         user_id=product.seller_id,
         title="Tin đăng chưa được phê duyệt",
         message=f"Tin đăng '{product.title}' bị từ chối duyệt. Lý do: {payload.reject_reason}. Vui lòng cập nhật lại thông tin để được duyệt lại.",
@@ -430,6 +468,16 @@ def reject_product(
     )
 
     db.commit()
+    db.refresh(notif)
+
+    # Đẩy Real-time WebSocket cho người bán
+    await push_realtime_notification_safe(
+        user_id=product.seller_id,
+        notif=notif,
+        tag="product_rejected",
+        extra_data={"product_id": product.product_id, "reject_reason": payload.reject_reason}
+    )
+
     return ProductRejectResponse(
         product_id=product.product_id,
         status_id=5,
@@ -440,7 +488,7 @@ def reject_product(
     )
 
 
-def admin_delete_product(
+async def admin_delete_product(
     product_id: int,
     current_admin: User,
     db: Session
@@ -448,7 +496,7 @@ def admin_delete_product(
     """
     Buộc gỡ bỏ tin vi phạm nghiêm trọng (Chỉ Super Admin - BR-ADM-1):
     - Soft delete: gán deleted_at = now().
-    - Gửi thông báo cảnh cáo người bán.
+    - Gửi thông báo cảnh cáo người bán và đẩy WebSocket.
     - Ghi SystemLog (Delete_Post).
     """
     product = db.get(Product, product_id)
@@ -462,7 +510,7 @@ def admin_delete_product(
     product.deleted_at = now_utc
     product.status_id = 4  # Hidden
 
-    send_system_notification(
+    notif = send_system_notification(
         user_id=product.seller_id,
         title="Tin đăng bị gỡ bỏ do vi phạm nghiêm trọng",
         message=f"Tin đăng '{product.title}' đã bị Ban Quản Trị buộc gỡ bỏ khỏi hệ thống do vi phạm nghiêm trọng tiêu chuẩn cộng đồng.",
@@ -478,6 +526,15 @@ def admin_delete_product(
     )
 
     db.commit()
+    db.refresh(notif)
+
+    await push_realtime_notification_safe(
+        user_id=product.seller_id,
+        notif=notif,
+        tag="product_deleted",
+        extra_data={"product_id": product.product_id}
+    )
+
     return {
         "message": f"Đã gỡ bỏ vĩnh viễn tin đăng ID {product_id} khỏi sàn UniMarket",
         "product_id": product_id,
@@ -643,7 +700,7 @@ def get_admin_report_detail(
     )
 
 
-def resolve_user_report(
+async def resolve_user_report(
     report_id: int,
     payload: ReportResolveRequest,
     current_admin: User,
@@ -677,6 +734,7 @@ def resolve_user_report(
     report.status = "Resolved"
     is_user_banned = False
     is_target_deleted = False
+    violator_notif: Optional[Notification] = None
 
     # Xác định đối tượng vi phạm (violator)
     violator_id: Optional[int] = None
@@ -723,7 +781,7 @@ def resolve_user_report(
                 active_prod.status_id = 4  # Hidden
 
             # Thông báo cho người vi phạm
-            send_system_notification(
+            violator_notif = send_system_notification(
                 user_id=violator_id,
                 title="Tài khoản của bạn đã bị khóa do vi phạm",
                 message=f"Tài khoản của bạn đã bị vô hiệu hóa vì: {payload.action_taken}. Bạn có thể gửi đơn kháng cáo CCCD qua ứng dụng UniMarket.",
@@ -757,7 +815,7 @@ def resolve_user_report(
                         ))
 
     # Gửi thông báo cảm ơn người gửi tố cáo (reporter)
-    send_system_notification(
+    reporter_notif = send_system_notification(
         user_id=report.reporter_id,
         title="Báo cáo vi phạm của bạn đã được giải quyết",
         message=f"Cảm ơn bạn đã hỗ trợ bảo vệ cộng đồng UniMarket. Báo cáo của bạn về {report.target_type} #{report.target_id} đã được Ban Quản Trị xử lý: {payload.action_taken}.",
@@ -775,6 +833,28 @@ def resolve_user_report(
     )
 
     db.commit()
+
+    # Đẩy Real-time WebSocket:
+    # 1. Kích hoạt Force Logout cho kẻ gian lận nếu bị ban
+    if violator_notif and violator_id:
+        db.refresh(violator_notif)
+        await push_realtime_notification_safe(
+            user_id=violator_id,
+            notif=violator_notif,
+            tag="account_banned",
+            extra_data={"force_logout": True, "reason": payload.action_taken}
+        )
+
+    # 2. Báo Toast kết quả cho người gửi tố cáo
+    if reporter_notif:
+        db.refresh(reporter_notif)
+        await push_realtime_notification_safe(
+            user_id=report.reporter_id,
+            notif=reporter_notif,
+            tag="report_resolved",
+            extra_data={"report_id": report.report_id, "target_type": report.target_type}
+        )
+
     return ReportResolveResponse(
         report_id=report.report_id,
         status="Resolved",
@@ -1014,7 +1094,7 @@ def get_appeal_detail(
     return _build_appeal_detail_dto(appeal)
 
 
-def approve_appeal(
+async def approve_appeal(
     request_id: int,
     current_admin: User,
     db: Session
@@ -1074,7 +1154,7 @@ def approve_appeal(
             db.delete(bl)
 
     # 3. Gửi thông báo hệ thống
-    send_system_notification(
+    notif = send_system_notification(
         user_id=user.id,
         title="Kháng cáo được chấp thuận - Tài khoản đã mở khóa",
         message="Hồ sơ xác minh danh tính và SIM của bạn đã được Ban Quản Trị phê duyệt. Tài khoản của bạn đã được kích hoạt lại bình thường.",
@@ -1091,6 +1171,15 @@ def approve_appeal(
     )
 
     db.commit()
+    db.refresh(notif)
+
+    await push_realtime_notification_safe(
+        user_id=user.id,
+        notif=notif,
+        tag="appeal_approved",
+        extra_data={"request_id": appeal.request_id}
+    )
+
     return AppealApproveResponse(
         request_id=appeal.request_id,
         status="APPROVED",
@@ -1101,7 +1190,7 @@ def approve_appeal(
     )
 
 
-def reject_appeal(
+async def reject_appeal(
     request_id: int,
     payload: AppealRejectRequest,
     current_admin: User,
@@ -1135,7 +1224,7 @@ def reject_appeal(
     appeal.note = f"{appeal.note}\n{rejection_note}" if appeal.note else rejection_note
 
     # Gửi Notification
-    send_system_notification(
+    notif = send_system_notification(
         user_id=appeal.user_id,
         title="Đơn kháng cáo tài khoản bị từ chối",
         message=f"Hồ sơ kháng cáo mở khóa tài khoản của bạn đã bị từ chối: {payload.reject_reason}. Vui lòng chuẩn bị lại giấy tờ hợp lệ và gửi lại.",
@@ -1152,6 +1241,15 @@ def reject_appeal(
     )
 
     db.commit()
+    db.refresh(notif)
+
+    await push_realtime_notification_safe(
+        user_id=appeal.user_id,
+        notif=notif,
+        tag="appeal_rejected",
+        extra_data={"request_id": appeal.request_id, "reject_reason": payload.reject_reason}
+    )
+
     return AppealRejectResponse(
         request_id=appeal.request_id,
         status="REJECTED",
@@ -1362,7 +1460,7 @@ def get_admin_user_detail(
     )
 
 
-def update_user_active_status(
+async def update_user_active_status(
     user_id: int,
     payload: UserStatusUpdateRequest,
     current_admin: User,
@@ -1437,7 +1535,7 @@ def update_user_active_status(
                     ))
 
         # Thông báo cho người dùng
-        send_system_notification(
+        user_notif = send_system_notification(
             user_id=user_id,
             title="Tài khoản của bạn đã bị khóa",
             message=f"Tài khoản UniMarket của bạn đã bị khóa bởi Quản trị viên. Lý do: {payload.reason}. Bạn có thể gửi đơn kháng cáo CCCD qua ứng dụng.",
@@ -1465,7 +1563,7 @@ def update_user_active_status(
             for bl in db.scalars(stmt_clean).all():
                 db.delete(bl)
 
-        send_system_notification(
+        user_notif = send_system_notification(
             user_id=user_id,
             title="Tài khoản của bạn đã được mở khóa",
             message=f"Ban Quản Trị đã mở khóa tài khoản của bạn: {payload.reason}. Chúc bạn có trải nghiệm mua sắm tuyệt vời tại UniMarket!",
@@ -1481,6 +1579,17 @@ def update_user_active_status(
         )
 
     db.commit()
+    if user_notif:
+        db.refresh(user_notif)
+        tag = "account_banned" if payload.is_active is False else "account_unbanned"
+        extra = {"force_logout": True, "reason": payload.reason} if payload.is_active is False else {}
+        await push_realtime_notification_safe(
+            user_id=user_id,
+            notif=user_notif,
+            tag=tag,
+            extra_data=extra
+        )
+
     return {
         "message": f"Đã thực hiện {action_label} thành công cho người dùng ID {user_id}",
         "user_id": user_id,
@@ -1489,7 +1598,7 @@ def update_user_active_status(
     }
 
 
-def update_user_role(
+async def update_user_role(
     user_id: int,
     payload: UserRoleUpdateRequest,
     current_admin: User,
@@ -1532,7 +1641,7 @@ def update_user_role(
     user.role_id = payload.role_id
 
     # Gửi thông báo
-    send_system_notification(
+    notif = send_system_notification(
         user_id=user_id,
         title="Vai trò tài khoản được cập nhật",
         message=f"Vai trò tài khoản của bạn trên UniMarket đã được cập nhật thành: {role_record.role_name}.",
@@ -1549,6 +1658,15 @@ def update_user_role(
     )
 
     db.commit()
+    db.refresh(notif)
+
+    await push_realtime_notification_safe(
+        user_id=user_id,
+        notif=notif,
+        tag="role_updated",
+        extra_data={"new_role_id": payload.role_id, "role_name": role_record.role_name}
+    )
+
     return {
         "message": f"Đã cập nhật vai trò người dùng ID {user_id} thành '{role_record.role_name}' thành công",
         "user_id": user_id,
