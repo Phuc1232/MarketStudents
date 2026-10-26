@@ -59,7 +59,6 @@ from src.modules.Interaction.services import (
     get_potential_buyers_for_product,
     toggle_follow_user,
     check_follow_status,
-    process_mark_sold_and_notify_buyer,
     get_user_notifications,
     get_unread_notifications_count,
     mark_notification_as_read,
@@ -555,30 +554,6 @@ def list_potential_buyers(
     """
     return get_potential_buyers_for_product(product_id=product_id, seller_id=user.id, db=db)
 
-
-@router.patch(
-    "/product/{product_id}/mark-sold",
-    status_code=status.HTTP_200_OK,
-    summary="Đánh dấu tin đã bán, chọn người mua và gửi thông báo đánh giá (Seq 7 - Bước 1 & 2)"
-)
-async def mark_sold_and_request_review(
-    product_id: int,
-    buyer_id: Optional[int] = Query(None, description="ID người mua được chọn từ danh sách potential-buyers"),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Thực hiện trọn vẹn luồng Seq 7:
-    - Cập nhật trạng thái tin thành Sold.
-    - Tạo Notification mời đánh giá gửi người mua.
-    - Push Real-time WebSocket sang cho Người mua để kích hoạt Form đánh giá (Bước 2).
-    """
-    return await process_mark_sold_and_notify_buyer(
-        product_id=product_id,
-        seller_id=user.id,
-        buyer_id=buyer_id,
-        db=db
-    )
 
 
 @router.get(

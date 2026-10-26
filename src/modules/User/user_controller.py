@@ -11,7 +11,7 @@ from .service import (get_current_user, get_all_user, get_user, delete_user_for_
 update_pass_user_for_user, 
 get_profile,update_profile, 
 get_user_address, add_user_address, update_address, delete_user_address, 
-request_student_otp,confirm_student_otp, upload_student_card, delete_user_by_admin,
+request_student_otp,confirm_student_otp, upload_student_card,
 get_user_search_history, save_user_search_keyword, delete_user_search_keyword) 
 
 router=APIRouter(
@@ -101,10 +101,6 @@ def remove_search_keyword(search_id: int, user: User = Depends(get_current_user)
 def get_user_id(id: int, db: Session = Depends(get_db)):
     return get_user(id, db)
 
-
-@router.delete("/{user_id}", status_code=status.HTTP_200_OK)
-def delete_user_admin(user_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return delete_user_by_admin(user_id, user.role_id, db)
 
 
 

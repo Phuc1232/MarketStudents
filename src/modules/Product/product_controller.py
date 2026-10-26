@@ -113,9 +113,18 @@ def track_product_view(
 def update_product (product_id: int, form: ProductUpdate,  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return update_my_product(product_id, user.id,form,db)
 
-@router.patch("/{product_id}/sold", status_code = status.HTTP_200_OK)
-def sold_product (product_id: int, buyer_id: Optional[int] = Query(None, description="ID người mua nếu có"), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return mark_product_as_sold(product_id,user.id,buyer_id,db)
+@router.patch(
+    "/{product_id}/sold",
+    status_code=status.HTTP_200_OK,
+    summary="Đánh dấu tin đăng đã bán, chọn người mua và gửi thông báo mời đánh giá (Seq 7)"
+)
+async def sold_product(
+    product_id: int,
+    buyer_id: Optional[int] = Query(None, description="ID người mua nếu có"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return await mark_product_as_sold(product_id, user.id, buyer_id, db)
 
 @router.delete("/{product_id}", status_code=status.HTTP_200_OK)
 def remove_product(

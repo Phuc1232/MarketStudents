@@ -68,16 +68,6 @@ def delete_user_for_user(user_id: int, db: Session):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Loi!!!!")
     user.isActive = False
     db.commit()
-def delete_user_by_admin (user_id: int, role_id: int, db: Session):
-    if (role_id ==1 ):
-        user=db.get(User,user_id)
-        if not user: 
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="NOT FOUND!!!")
-        user.isActive = False
-        db.commit()
-    else:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ONLY ADMIN!!!")
-    return {"message": "Vo Hieu Tai Khoan Thanh Cong!!!!"}
 
 def update_pass_user_for_user(from_update: User_Update, user_id: int , db: Session= Depends(get_db)):
     user=db.get(User, user_id)
@@ -378,4 +368,4 @@ def delete_user_search_keyword(search_id: int, user_id: int, db: Session):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy mục lịch sử tìm kiếm")
     db.delete(item)
     db.commit()
-    return {"message": "Đã xóa từ khóa khỏi lịch sử tìm kiếm thành công"}
+    return {"message": "Đã xóa từ khóa khỏi lịch sử tìm kiếm thành công"}

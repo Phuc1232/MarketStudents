@@ -10,7 +10,9 @@ from src.modules import (
     SavedSearch, ReviewProductConversation, UserSummaryResponse,
     MyPurchaseItemResponse, PaginatedPurchasesResponse
 )
-from src.modules.Interaction.services import get_user_display_name, get_user_avatar
+from src.modules.Interaction.services import (
+    get_user_display_name, get_user_avatar, process_mark_sold_and_notify_buyer
+)
 
 def get_all_product (db: Session):
     return db.scalars(select(Product)).all()
@@ -254,24 +256,17 @@ def update_my_product (product_id: int, user_id: int, form: ProductUpdate, db: S
     db.refresh(product)
     return get_product_by_id(product.product_id,user_id,db)
 
-def mark_product_as_sold (product_id: int, user_id: int, buyer_id: Optional[int], db: Session):
-    product = db.get(Product,product_id)
-    if not product or product.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy sản phẩm")
-    if (product.seller_id != user_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bạn không có quyền thay đổi trạng thái của tin đăng này!"
-        )
-    product.status_id = 3
-    if buyer_id:
-        product.buyer_id = buyer_id
-    db.commit()
-    return {
-        "message": "Đã cập nhật trạng thái tin đăng thành 'ĐÃ BÁN'. Tin đã được ẩn khỏi danh sách tìm kiếm chung.",
-        "product_id": product_id,
-        "status": "Sold"
-    }
+async def mark_product_as_sold(product_id: int, user_id: int, buyer_id: Optional[int], db: Session):
+    """
+    Đánh dấu tin đăng là đã bán (Sold), cập nhật người mua và tự động kích hoạt luồng mời đánh giá (Seq 7).
+    Tích hợp trọn vẹn cập nhật DB, sinh thông báo Notification và đẩy Real-time WebSocket cho người mua.
+    """
+    return await process_mark_sold_and_notify_buyer(
+        product_id=product_id,
+        seller_id=user_id,
+        buyer_id=buyer_id,
+        db=db
+    )
 
 def soft_delete_product(product_id: int, user_id: int, db: Session):
     """
