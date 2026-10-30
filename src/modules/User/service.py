@@ -1,10 +1,12 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, BackgroundTasks
 from src.modules import (User, TokenData, Token, Register, User_Update, 
                          User_Providers, userProfile, UserProfileUpdate,
                          Address, AddressCreate,
                          StudentVerification, Blacklist, SavedSearch)
 from src.share.uilts import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, timedelta, jwt, datetime, timezone
 from src.Core.security import get_password_hashed, verify_password
+from src.share.otp_storage import otp_storage
+from src.share.email_service import send_student_otp_email
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from src.api.deps import get_db
@@ -211,96 +213,119 @@ def delete_user_address (address_id: int, user_id: int, db: Session):
     db.delete(addr)
     db.commit()
     return {"message": "Đã xóa địa chỉ thành công"}
-# In-memory OTP storage: { "edu_email": {"otp": "123456", "user_id": 1, "expires_at": datetime} }
-OTP_CACHE ={}
-def request_student_otp (user_id: int, edu_email: str, db: Session):
-    # check the user's email has "edu"?
-    
+# OTP Service integrated with Redis (Native SETEX TTL) and InMemory fallback.
+# Zero PostgreSQL table writes.
+def request_student_otp(
+    user_id: int, 
+    edu_email: str, 
+    db: Session, 
+    background_tasks: Optional[BackgroundTasks] = None
+):
+    # check the user's email has 'edu'?
     email_clean = edu_email.strip().lower()
-    if not (email_clean.endswith("edu.vn")):
-        raise (
-            HTTPException(
-                status_code= status.HTTP_401_UNAUTHORIZED, detail=f"Email không hợp lệ! Vui lòng sử dụng email chính thức của trường đại học kết thúc bằng đuôi '.edu.vn'"
-            )
+    if not email_clean.endswith("edu.vn"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email không hợp lệ! Vui lòng sử dụng email chính thức của trường đại học kết thúc bằng đuôi '.edu.vn'"
         )
-    # check the email verifed 
-    stmt = select(StudentVerification).where(StudentVerification.edu_email==email_clean,
-                                             StudentVerification.status == "Verified")
-    exsiting = db.scalars(stmt).first()
-    if  exsiting and exsiting.user_id != user_id:
-        raise (
-            HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email sinh viên này đã được liên kết và xác minh bởi một tài khoản khác trên UniMarket!"
-            )
-        )
-    otp = f"{random.randint(100000,999999)}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-    OTP_CACHE[email_clean]={
-        "otp": otp,
-        "user_id": user_id,
-        "expires_at": expires_at
-    }
-    # In mã OTP ra Console phục vụ kiểm thử môi trường dev
+    # check the email verified
+    stmt = select(StudentVerification).where(
+        StudentVerification.edu_email == email_clean,
+        StudentVerification.status == "Verified"
+    )
+    exsiting = db.scalars(stmt).first()
+    if exsiting and exsiting.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email sinh viên này đã được liên kết và xác minh bởi một tài khoản khác trên UniMarket!"
+        )
+
+    # Chống spam: Kiểm tra cooldown 60s giữa 2 lần gửi OTP
+    remaining_cooldown = otp_storage.get_remaining_cooldown(email_clean, cooldown_seconds=60)
+    if remaining_cooldown > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Thao tác quá nhanh! Vui lòng đợi {remaining_cooldown} giây trước khi yêu cầu gửi lại mã OTP mới."
+        )
+
+    otp = f"{random.randint(100000, 999999)}"
+
+    # Save OTP to Redis / InMemory storage with 300s TTL (Zero DB table writes)
+    otp_storage.save_otp(email_clean, user_id, otp, ttl_seconds=300)
+
+    # Console print for local dev & testing
     try:
-        print("\n" + "="*60)
-        print(f"[UNIMARKET OTP SERVICE] GUI MA XAC THUC SINH VIEN")
-        print(f"-> Gui toi Email: {email_clean}")
-        print(f"-> Ma OTP (6 so): {otp}")
-        print(f"-> Thoi han     : 5 phut (het han luc {expires_at.strftime('%H:%M:%S')})")
-        print("="*60 + "\n")
+        print("\n" + "=" * 60)
+        print(f"[UNIMARKET OTP SERVICE] GỬI MÃ XÁC THỰC SINH VIÊN")
+        print(f"-> Gửi tới Email : {email_clean}")
+        print(f"-> Mã OTP (6 số) : {otp}")
+        print(f"-> Thời hạn      : 5 phút")
+        print(f"-> Storage       : {otp_storage.backend_name}")
+        print("=" * 60 + "\n")
     except Exception:
         pass
+
+    # Send email asynchronously in background
+    if background_tasks is not None:
+        background_tasks.add_task(send_student_otp_email, email_clean, otp)
+    else:
+        send_student_otp_email(email_clean, otp)
 
     return {
         "message": "Mã OTP đã được gửi thành công đến email trường của bạn. Vui lòng kiểm tra hộp thư!",
         "edu_email": email_clean
     }
 
-def confirm_student_otp (user_id: int, edu_email: str, otp_code: int, db: Session):
+
+def confirm_student_otp(user_id: int, edu_email: str, otp_code: str, db: Session):
     email_clean = edu_email.strip().lower()
-    cache =OTP_CACHE.get(email_clean)
-    if not cache or cache["user_id"]!=user_id:
-        raise (
-            HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Không tìm thấy yêu cầu xác thực cho email này hoặc bạn chưa gửi yêu cầu lấy mã OTP!"
+
+    # Verify and delete OTP in a single operation via OTP storage adapter
+    is_valid, reason = otp_storage.verify_and_delete_otp(email_clean, str(otp_code), user_id)
+    if not is_valid:
+        if reason == "NOT_FOUND_OR_EXPIRED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mã OTP đã hết hạn (quá 5 phút) hoặc không tìm thấy yêu cầu xác thực. Vui lòng yêu cầu cấp mã mới!"
             )
-        )
-    if datetime.now(timezone.utc) > cache ["expires_at"]:
-        OTP_CACHE.pop(email_clean,None)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mã OTP đã hết hạn (quá 5 phút). Vui lòng yêu cầu cấp mã mới!"
-        )
-    if cache["otp"] != otp_code.strip():
-         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mã OTP không chính xác. Vui lòng kiểm tra lại!"
-        )
-    stmt = select (StudentVerification).where(StudentVerification.user_id==user_id)
+        elif reason == "USER_MISMATCH":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Yêu cầu xác thực này thuộc về một tài khoản người dùng khác!"
+            )
+        elif reason == "INVALID_OTP":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mã OTP không chính xác. Vui lòng kiểm tra lại!"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Xác thực mã OTP thất bại. Vui lòng thử lại!"
+            )
+
+    stmt = select(StudentVerification).where(StudentVerification.user_id == user_id)
     verfication = db.scalars(stmt).first()
     if not verfication:
         verfication = StudentVerification(
             user_id=user_id,
             status="Verified",
-            edu_email = email_clean
+            edu_email=email_clean
         )
         db.add(verfication)
     else:
-        verfication.edu_email=email_clean
-        verfication.status="Verified"
-        verfication.submitted_at=datetime.now(timezone.utc)
+        verfication.edu_email = email_clean
+        verfication.status = "Verified"
+        verfication.submitted_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(verfication)
 
-    user= db.get (User,user_id)
+    user = db.get(User, user_id)
     if user:
-        user.account_type="Sinh Vien"
-        user.role_id=3
+        user.account_type = "Sinh Vien"
+        user.role_id = 3
     db.commit()
-    OTP_CACHE.pop(email_clean,None)
     return verfication
 
 def upload_student_card (user_id: int, card_image_url: str, db: Session):

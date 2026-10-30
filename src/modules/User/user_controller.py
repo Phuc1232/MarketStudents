@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, status, APIRouter, BackgroundTasks
 from src.modules import (Register, Token, User, Register_response, 
                          User_Update, UserProfileUpdate, UserProfileResponse,
                          AddressResponse, AddressCreate, 
@@ -65,8 +65,13 @@ def remove_address(
     return delete_user_address(address_id, user.id, db)
 
 @router.post("/verify-student/request-otp", status_code=status.HTTP_200_OK)
-def create_otp (body: StudentOtpRequest ,user: User= Depends(get_current_user), db: Session= Depends(get_db)):
-    return request_student_otp(user.id,body.edu_email,db)
+def create_otp(
+    body: StudentOtpRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return request_student_otp(user.id, body.edu_email, db, background_tasks=background_tasks)
 
 @router.post("/verify-student/confirm-otp", response_model=StudentVerificationResponse, status_code=status.HTTP_200_OK)
 def confirm_otp(body: StudentOtpConfirm, user: User= Depends(get_current_user), db: Session= Depends(get_db)):
