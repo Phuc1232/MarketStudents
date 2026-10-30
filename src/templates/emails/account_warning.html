@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Cảnh báo vi phạm quy chế UniMarket{% endblock %}
+
+{% block header_style %}style="background: linear-gradient(135deg, #d97706, #b45309);"{% endblock %}
+{% block header_subtitle %}Trung Tâm Kiểm Duyệt & An Toàn Sàn Giao Dịch{% endblock %}
+
+{% block custom_css %}
+<style>
+  .warning-banner {
+    background-color: #fffbeb;
+    border-left: 5px solid #f59e0b;
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin: 20px 0;
+  }
+  .warning-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #b45309;
+    margin: 0 0 6px 0;
+  }
+  .warning-desc {
+    font-size: 14px;
+    color: #78350f;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .penalty-box {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: #475569;
+    line-height: 1.6;
+    margin-top: 20px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <p style="font-size: 16px; margin-top: 0;">Xin chào <strong>{{ user_name }}</strong>,</p>
+  <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+    Ban Quản Trị hệ thống gửi email này để thông báo về hành vi vi phạm tiêu chuẩn cộng đồng hoặc quy định giao dịch được ghi nhận trên tài khoản của bạn.
+  </p>
+
+  <div class="warning-banner">
+    <div class="warning-title">⚠️ Lý do cảnh cáo: {{ reason }}</div>
+    {% if details %}
+      <div class="warning-desc">Chi tiết: {{ details }}</div>
+    {% endif %}
+  </div>
+
+  <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+    UniMarket luôn hướng đến một môi trường trao đổi đồ dùng sinh viên lành mạnh, minh bạch và an toàn. Vui lòng rà soát lại các tin đăng hoặc hành vi tương tác của mình để đảm bảo tuân thủ quy chế sàn.
+  </p>
+
+  <div class="penalty-box">
+    🔴 <strong>Chính sách chế tài:</strong> Nếu tiếp tục tái phạm các hành vi tương tự, tài khoản của bạn sẽ bị tạm ngưng hoạt động hoặc khóa vĩnh viễn mà không cần báo trước.
+  </div>
+{% endblock %}
+

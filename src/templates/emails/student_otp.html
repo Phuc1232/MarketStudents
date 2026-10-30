@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Mã xác thực tài khoản sinh viên UniMarket{% endblock %}
+
+{% block custom_css %}
+<style>
+  .otp-card {
+    background-color: #f0fdf4;
+    border: 2px dashed #22c55e;
+    border-radius: 12px;
+    text-align: center;
+    padding: 24px 16px;
+    margin: 24px 0;
+  }
+  .otp-code {
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: 10px;
+    color: #15803d;
+    font-family: 'Courier New', Courier, monospace;
+    margin: 10px 0;
+  }
+  .otp-notice {
+    font-size: 13px;
+    color: #166534;
+  }
+  .warning-box {
+    background-color: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #b45309;
+    border-radius: 4px;
+    margin-top: 24px;
+    line-height: 1.5;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <p style="font-size: 16px; margin-top: 0;">Xin chào bạn,</p>
+  <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+    Bạn vừa gửi yêu cầu xác thực email trường đại học để nâng cấp tài khoản thành <strong>Sinh viên chính thức</strong> trên nền tảng UniMarket.
+  </p>
+
+  <div class="otp-card">
+    <div class="otp-notice">Mã OTP xác thực của bạn là:</div>
+    <div class="otp-code">{{ otp_code }}</div>
+    <div class="otp-notice">⏱️ Có hiệu lực trong <strong>{{ expire_minutes|default(5) }} phút</strong> kể từ khi gửi</div>
+  </div>
+
+  <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Vui lòng nhập mã OTP này vào ứng dụng để hoàn tất quy trình liên kết. Sau khi xác thực thành công, bạn sẽ nhận được huy hiệu Sinh viên và mở khóa toàn bộ quyền lợi giao dịch an toàn.
+  </p>
+
+  <div class="warning-box">
+    ⚠️ <strong>Lưu ý bảo mật:</strong> Không chia sẻ mã OTP này cho bất kỳ ai, kể cả nhân viên UniMarket. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.
+  </div>
+{% endblock %}
+

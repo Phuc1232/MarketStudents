@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Tin đăng chưa được phê duyệt - UniMarket{% endblock %}
+
+{% block header_style %}style="background: linear-gradient(135deg, #0284c7, #0369a1);"{% endblock %}
+{% block header_subtitle %}Bộ Phận Kiểm Duyệt Tin Đăng{% endblock %}
+
+{% block custom_css %}
+<style>
+  .reject-card {
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-left: 5px solid #0284c7;
+    padding: 18px 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+  }
+  .reject-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0369a1;
+    margin: 0 0 6px 0;
+  }
+  .reject-reason {
+    font-size: 14px;
+    color: #075985;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .action-container {
+    text-align: center;
+    margin: 28px 0 16px 0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <p style="font-size: 16px; margin-top: 0;">Xin chào <strong>{{ user_name }}</strong>,</p>
+  <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+    Tin đăng của bạn với tiêu đề <strong>"{{ product_title }}"</strong> chưa đáp ứng đủ tiêu chuẩn phê duyệt để hiển thị công khai trên UniMarket.
+  </p>
+
+  <div class="reject-card">
+    <div class="reject-title">📋 Lý do chưa duyệt:</div>
+    <div class="reject-reason">{{ reason }}</div>
+  </div>
+
+  <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Vui lòng kiểm tra lại hình ảnh sản phẩm, thông tin mô tả hoặc mức giá đề xuất, sau đó cập nhật lại tin đăng để đội ngũ quản trị viên tiến hành duyệt lại cho bạn.
+  </p>
+
+  <div class="action-container">
+    <a href="{{ edit_link|default('https://unimarket.vn/seller/products') }}" class="btn">
+      Chỉnh Sửa Tin Đăng Của Bạn
+    </a>
+  </div>
+{% endblock %}
+
