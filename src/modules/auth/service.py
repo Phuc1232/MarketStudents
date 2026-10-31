@@ -24,7 +24,9 @@ from src.modules import (
     ForgotPasswordGeneralResponse
 )
 
-RESET_TOKEN_EXPIRE_MINUTES = 10
+# CẤU HÌNH THỜI HẠN RESET PASSWORD & OTP (CHUẨN PRODUCTION):
+RESET_TOKEN_EXPIRE_MINUTES = 10  # Token có hiệu lực 10 phút
+OTP_EXPIRE_SECONDS = 300         # Mã OTP có hiệu lực 5 phút (300s)
 
 
 def verify_login_google(data: GoogleAuthenRequest, db: Session = Depends(get_db)):
@@ -150,7 +152,7 @@ def request_forgot_password(
         email=clean_email,
         user_id=user.id,
         otp=otp_code,
-        ttl_seconds=300,
+        ttl_seconds=OTP_EXPIRE_SECONDS,
         purpose="forgot_pwd"
     )
 
@@ -173,10 +175,10 @@ def request_forgot_password(
             to_email=clean_email,
             user_name=user_name,
             otp_code=otp_code,
-            expire_minutes=5
+            expire_minutes=OTP_EXPIRE_SECONDS // 60
         )
     else:
-        send_password_reset_otp_email(clean_email, user_name, otp_code, 5)
+        send_password_reset_otp_email(clean_email, user_name, otp_code, OTP_EXPIRE_SECONDS // 60)
 
     return ForgotPasswordGeneralResponse(
         message="Mã xác thực OTP đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư!",
@@ -213,7 +215,7 @@ def verify_forgot_password_otp(
         if reason == "NOT_FOUND_OR_EXPIRED":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Mã OTP đã hết hạn (quá 5 phút) hoặc không tìm thấy yêu cầu. Vui lòng xin cấp lại mã mới!"
+                detail=f"Mã OTP đã hết hạn (quá {OTP_EXPIRE_SECONDS // 60} phút) hoặc không tìm thấy yêu cầu. Vui lòng xin cấp lại mã mới!"
             )
         elif reason == "INVALID_OTP":
             raise HTTPException(
@@ -237,7 +239,7 @@ def verify_forgot_password_otp(
     )
 
     return VerifyResetOtpResponse(
-        message="Xác thực OTP thành công. Vui lòng tạo mật khẩu mới trong vòng 10 phút.",
+        message=f"Xác thực OTP thành công. Vui lòng tạo mật khẩu mới trong vòng {RESET_TOKEN_EXPIRE_MINUTES} phút.",
         reset_token=reset_token
     )
 
@@ -255,7 +257,7 @@ def reset_password_with_token(
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phiên làm việc đã hết hạn (quá 10 phút). Vui lòng thực hiện lại từ đầu!"
+            detail=f"Phiên làm việc đã hết hạn (quá {RESET_TOKEN_EXPIRE_MINUTES} phút). Vui lòng thực hiện lại từ đầu!"
         )
     except jwt.InvalidTokenError:
         raise HTTPException(

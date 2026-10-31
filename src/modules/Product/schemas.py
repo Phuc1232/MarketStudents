@@ -1,4 +1,15 @@
+from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
+
+# ==============================================================================
+# ENUM SẮP XẾP SẢN PHẨM (SORTING)
+# ==============================================================================
+class ProductSortBy(str, Enum):
+    NEWEST = "newest"         # Mới nhất (Mặc định)
+    PRICE_ASC = "price_asc"   # Giá từ thấp đến cao (Tiết kiệm nhất)
+    PRICE_DESC = "price_desc" # Giá từ cao đến thấp
+    POPULAR = "popular"       # Phổ biến nhất (Xem nhiều nhất qua view_count)
+
 from typing import Optional, List
 from datetime import datetime
 
@@ -84,6 +95,7 @@ class ProductDetailResponse(BaseModel):
     condition_id: int
     seller_id: int
     buyer_id: Optional[int] = None
+    view_count: int = 0
     deleted_at: Optional[datetime] = None
     CreatedAt: Optional[datetime] = None
 
@@ -102,6 +114,7 @@ class ProductListItemResponse(BaseModel):
     status_id: int
     condition_id: int
     seller_id: int
+    view_count: int = 0
     CreatedAt: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -140,5 +153,68 @@ class PaginatedPurchasesResponse(BaseModel):
     page: int
     page_size: int
     items: List[MyPurchaseItemResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==============================================================================
+# SCHEMAS CHO VÒNG ĐỜI & THÙNG RÁC TIN ĐĂNG (BR-7, AC-12)
+# ==============================================================================
+
+class ToggleVisibilityResponse(BaseModel):
+    product_id: int
+    status_id: int = Field(..., description="2: Active (Hiển thị), 4: Hidden (Tạm ẩn)")
+    status_name: str = Field(..., description="Active hoặc Hidden")
+    message: str = Field(..., description="Thông báo trạng thái thay đổi")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TrashProductItemResponse(BaseModel):
+    product_id: int
+    title: str
+    price: float
+    thumbnails: Optional[str] = None
+    sub_category_id: int
+    condition_id: int
+    status_id: int
+    deleted_at: datetime
+    remaining_days: int = Field(
+        ..., 
+        description="Số ngày còn lại trước khi tin bị xóa vĩnh viễn theo quy tắc BR-7 (Tối đa 30 ngày)"
+    )
+    remaining_seconds: Optional[int] = Field(
+        None,
+        description="Số giây còn lại trước khi hết hạn (thuận tiện cho việc test đếm ngược 1-2 phút)"
+    )
+    can_restore: bool = Field(
+        True, 
+        description="True nếu tin còn trong thời hạn 30 ngày để khôi phục"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedTrashResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[TrashProductItemResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RestoreProductResponse(BaseModel):
+    product_id: int
+    status_id: int
+    message: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CleanupTrashResponse(BaseModel):
+    cleaned_products_count: int = Field(..., description="Số tin đăng quá hạn 30 ngày đã bị xóa vĩnh viễn")
+    cleaned_product_ids: List[int] = Field(default=[], description="Danh sách ID các tin bị dọn dẹp")
+    message: str
 
     model_config = ConfigDict(from_attributes=True)

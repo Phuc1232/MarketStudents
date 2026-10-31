@@ -25,6 +25,7 @@ class SubCategory(Base):
 class Product(Base, Timestamp):
     __tablename__ = 'products'
     product_id = Column(INTEGER, primary_key=True, index=True)
+    view_count = Column(INTEGER, default=0, nullable=True, index=True)
     seller_id = Column(INTEGER, ForeignKey('user.id'))
     sub_category_id = Column(INTEGER, ForeignKey('sub_categories.sub_category_id'))
     status_id = Column(INTEGER, ForeignKey('product_statuses.status_id'))
@@ -35,7 +36,7 @@ class Product(Base, Timestamp):
     price = Column(Float, nullable=False)
     description = Column(Text)
     thumbnails = Column(Text)
-    deleted_at = Column(DateTime(timezone=True), nullable=True) # Soft delete
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index= True) # Soft delete
     
     # Relationships
     subcategory = relationship("SubCategory", back_populates="products")
