@@ -29,6 +29,7 @@ evidence
 task_phase3_t1_t2_t3_admin_moderation_code.txt
 run_dashboard.ps1
 tests_unimarket_comprehensive.json
+task_auth_forgot_password_code.txt
 openapi.json
 srs_extracted_text.txt
 pdf_diagram_images/

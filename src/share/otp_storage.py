@@ -9,20 +9,20 @@ from src.Core.config import REDIS_URL
 logger = logging.getLogger("unimarket.otp_storage")
 
 class BaseOTPStorage:
-    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300) -> bool:
+    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300, purpose: str = "student") -> bool:
         raise NotImplementedError
 
-    def get_otp(self, email: str) -> Optional[dict]:
+    def get_otp(self, email: str, purpose: str = "student") -> Optional[dict]:
         raise NotImplementedError
 
-    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60) -> int:
+    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60, purpose: str = "student") -> int:
         """
         Returns the remaining seconds of cooldown before another OTP can be requested.
         Returns 0 if no cooldown applies (allowed to send).
         """
         raise NotImplementedError
 
-    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: int) -> Tuple[bool, str]:
+    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: Optional[int] = None, purpose: str = "student") -> Tuple[bool, str]:
         """
         Verify the OTP code for an email and user_id.
         Returns:
@@ -33,7 +33,7 @@ class BaseOTPStorage:
         """
         raise NotImplementedError
 
-    def delete_otp(self, email: str) -> bool:
+    def delete_otp(self, email: str, purpose: str = "student") -> bool:
         raise NotImplementedError
 
 
@@ -46,19 +46,22 @@ class InMemoryOTPStorage(BaseOTPStorage):
         self._cache: dict[str, dict] = {}
         self._lock = threading.Lock()
 
+    def _get_cache_key(self, email: str, purpose: str) -> str:
+        return f"{purpose}:{email.strip().lower()}"
+
     def _clean_expired(self):
         now = time.time()
         expired_keys = [k for k, v in self._cache.items() if now > v.get("expires_at", 0)]
         for k in expired_keys:
             self._cache.pop(k, None)
 
-    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300) -> bool:
-        clean_email = email.strip().lower()
+    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300, purpose: str = "student") -> bool:
+        key = self._get_cache_key(email, purpose)
         now = time.time()
         expires_at = now + ttl_seconds
         with self._lock:
             self._clean_expired()
-            self._cache[clean_email] = {
+            self._cache[key] = {
                 "otp": str(otp).strip(),
                 "user_id": int(user_id),
                 "created_at": now,
@@ -66,14 +69,14 @@ class InMemoryOTPStorage(BaseOTPStorage):
             }
         return True
 
-    def get_otp(self, email: str) -> Optional[dict]:
-        clean_email = email.strip().lower()
+    def get_otp(self, email: str, purpose: str = "student") -> Optional[dict]:
+        key = self._get_cache_key(email, purpose)
         with self._lock:
-            data = self._cache.get(clean_email)
+            data = self._cache.get(key)
             if not data:
                 return None
             if time.time() > data.get("expires_at", 0):
-                self._cache.pop(clean_email, None)
+                self._cache.pop(key, None)
                 return None
             return {
                 "otp": data["otp"],
@@ -82,46 +85,46 @@ class InMemoryOTPStorage(BaseOTPStorage):
                 "expires_at": data["expires_at"]
             }
 
-    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60) -> int:
-        clean_email = email.strip().lower()
+    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60, purpose: str = "student") -> int:
+        key = self._get_cache_key(email, purpose)
         with self._lock:
-            data = self._cache.get(clean_email)
+            data = self._cache.get(key)
             if not data:
                 return 0
             if time.time() > data.get("expires_at", 0):
-                self._cache.pop(clean_email, None)
+                self._cache.pop(key, None)
                 return 0
             elapsed = time.time() - data.get("created_at", 0)
             if elapsed < cooldown_seconds:
                 return max(1, int(math.ceil(cooldown_seconds - elapsed)))
             return 0
 
-    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: int) -> Tuple[bool, str]:
-        clean_email = email.strip().lower()
+    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: Optional[int] = None, purpose: str = "student") -> Tuple[bool, str]:
+        key = self._get_cache_key(email, purpose)
         clean_code = str(otp_code).strip()
         with self._lock:
-            data = self._cache.get(clean_email)
+            data = self._cache.get(key)
             if not data:
                 return False, "NOT_FOUND_OR_EXPIRED"
 
             if time.time() > data.get("expires_at", 0):
-                self._cache.pop(clean_email, None)
+                self._cache.pop(key, None)
                 return False, "NOT_FOUND_OR_EXPIRED"
 
-            if data.get("user_id") != int(user_id):
+            if user_id is not None and data.get("user_id") != int(user_id):
                 return False, "USER_MISMATCH"
 
             if data.get("otp") != clean_code:
                 return False, "INVALID_OTP"
 
             # OTP is valid -> delete immediately (one-time use)
-            self._cache.pop(clean_email, None)
+            self._cache.pop(key, None)
             return True, "SUCCESS"
 
-    def delete_otp(self, email: str) -> bool:
-        clean_email = email.strip().lower()
+    def delete_otp(self, email: str, purpose: str = "student") -> bool:
+        key = self._get_cache_key(email, purpose)
         with self._lock:
-            return self._cache.pop(clean_email, None) is not None
+            return self._cache.pop(key, None) is not None
 
 
 class RedisOTPStorage(BaseOTPStorage):
@@ -136,11 +139,11 @@ class RedisOTPStorage(BaseOTPStorage):
         # Test connection
         self.client.ping()
 
-    def _get_key(self, email: str) -> str:
-        return f"otp:student:{email.strip().lower()}"
+    def _get_key(self, email: str, purpose: str = "student") -> str:
+        return f"otp:{purpose}:{email.strip().lower()}"
 
-    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300) -> bool:
-        key = self._get_key(email)
+    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300, purpose: str = "student") -> bool:
+        key = self._get_key(email, purpose)
         payload = json.dumps({
             "otp": str(otp).strip(),
             "user_id": int(user_id),
@@ -150,8 +153,8 @@ class RedisOTPStorage(BaseOTPStorage):
         self.client.setex(key, ttl_seconds, payload)
         return True
 
-    def get_otp(self, email: str) -> Optional[dict]:
-        key = self._get_key(email)
+    def get_otp(self, email: str, purpose: str = "student") -> Optional[dict]:
+        key = self._get_key(email, purpose)
         raw_val = self.client.get(key)
         if not raw_val:
             return None
@@ -160,8 +163,8 @@ class RedisOTPStorage(BaseOTPStorage):
         except Exception:
             return None
 
-    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60) -> int:
-        key = self._get_key(email)
+    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60, purpose: str = "student") -> int:
+        key = self._get_key(email, purpose)
         raw_val = self.client.get(key)
         if not raw_val:
             return 0
@@ -174,8 +177,8 @@ class RedisOTPStorage(BaseOTPStorage):
         except Exception:
             return 0
 
-    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: int) -> Tuple[bool, str]:
-        key = self._get_key(email)
+    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: Optional[int] = None, purpose: str = "student") -> Tuple[bool, str]:
+        key = self._get_key(email, purpose)
         clean_code = str(otp_code).strip()
         raw_val = self.client.get(key)
         if not raw_val:
@@ -187,7 +190,7 @@ class RedisOTPStorage(BaseOTPStorage):
             self.client.delete(key)
             return False, "NOT_FOUND_OR_EXPIRED"
 
-        if data.get("user_id") != int(user_id):
+        if user_id is not None and data.get("user_id") != int(user_id):
             return False, "USER_MISMATCH"
 
         if data.get("otp") != clean_code:
@@ -197,8 +200,8 @@ class RedisOTPStorage(BaseOTPStorage):
         self.client.delete(key)
         return True, "SUCCESS"
 
-    def delete_otp(self, email: str) -> bool:
-        key = self._get_key(email)
+    def delete_otp(self, email: str, purpose: str = "student") -> bool:
+        key = self._get_key(email, purpose)
         return bool(self.client.delete(key))
 
 
@@ -235,54 +238,54 @@ class HybridOTPStorage(BaseOTPStorage):
     def backend_name(self) -> str:
         return "Redis" if self._redis else "InMemory"
 
-    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300) -> bool:
+    def save_otp(self, email: str, user_id: int, otp: str, ttl_seconds: int = 300, purpose: str = "student") -> bool:
         try:
-            return self.active_backend.save_otp(email, user_id, otp, ttl_seconds)
+            return self.active_backend.save_otp(email, user_id, otp, ttl_seconds, purpose)
         except Exception as e:
             if self._redis:
                 logger.error(f"[OTP Storage] Redis save error ({e}), switching to InMemory fallback.")
                 self._redis = None
-                return self._in_memory.save_otp(email, user_id, otp, ttl_seconds)
+                return self._in_memory.save_otp(email, user_id, otp, ttl_seconds, purpose)
             raise e
 
-    def get_otp(self, email: str) -> Optional[dict]:
+    def get_otp(self, email: str, purpose: str = "student") -> Optional[dict]:
         try:
-            return self.active_backend.get_otp(email)
+            return self.active_backend.get_otp(email, purpose)
         except Exception as e:
             if self._redis:
                 logger.error(f"[OTP Storage] Redis get error ({e}), switching to InMemory fallback.")
                 self._redis = None
-                return self._in_memory.get_otp(email)
+                return self._in_memory.get_otp(email, purpose)
             raise e
 
-    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60) -> int:
+    def get_remaining_cooldown(self, email: str, cooldown_seconds: int = 60, purpose: str = "student") -> int:
         try:
-            return self.active_backend.get_remaining_cooldown(email, cooldown_seconds)
+            return self.active_backend.get_remaining_cooldown(email, cooldown_seconds, purpose)
         except Exception as e:
             if self._redis:
                 logger.error(f"[OTP Storage] Redis cooldown error ({e}), switching to InMemory fallback.")
                 self._redis = None
-                return self._in_memory.get_remaining_cooldown(email, cooldown_seconds)
+                return self._in_memory.get_remaining_cooldown(email, cooldown_seconds, purpose)
             return 0
 
-    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: int) -> Tuple[bool, str]:
+    def verify_and_delete_otp(self, email: str, otp_code: str, user_id: Optional[int] = None, purpose: str = "student") -> Tuple[bool, str]:
         try:
-            return self.active_backend.verify_and_delete_otp(email, otp_code, user_id)
+            return self.active_backend.verify_and_delete_otp(email, otp_code, user_id, purpose)
         except Exception as e:
             if self._redis:
                 logger.error(f"[OTP Storage] Redis verify error ({e}), switching to InMemory fallback.")
                 self._redis = None
-                return self._in_memory.verify_and_delete_otp(email, otp_code, user_id)
+                return self._in_memory.verify_and_delete_otp(email, otp_code, user_id, purpose)
             raise e
 
-    def delete_otp(self, email: str) -> bool:
+    def delete_otp(self, email: str, purpose: str = "student") -> bool:
         try:
-            return self.active_backend.delete_otp(email)
+            return self.active_backend.delete_otp(email, purpose)
         except Exception as e:
             if self._redis:
                 logger.error(f"[OTP Storage] Redis delete error ({e}), switching to InMemory fallback.")
                 self._redis = None
-                return self._in_memory.delete_otp(email)
+                return self._in_memory.delete_otp(email, purpose)
             raise e
 
 

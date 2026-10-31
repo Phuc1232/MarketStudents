@@ -109,7 +109,7 @@ def send_student_otp_email(to_email: str, otp_code: str, expire_minutes: int = 5
     """
     Tình huống 1: Gửi mã OTP xác nhận sinh viên (render student_otp.html).
     """
-    subject = f"[UniMarket] xác thực tài khoản nâng hạng sinh viên"
+    subject = f"[UniMarket] {otp_code} là mã xác thực tài khoản sinh viên của bạn"
     html_content = render_email_template(
         "student_otp.html",
         otp_code=otp_code,
@@ -151,7 +151,7 @@ def send_account_banned_email(
     to_email: str,
     user_name: str,
     reason: str,
-    appeal_link: str = "https://unimarket.vn/appeal"
+    appeal_link: str = "https://unimarket.vn/identity-verification/appeal"
 ) -> bool:
     """
     Tình huống 3: Gửi email khi tài khoản bị Admin tạm khóa (render account_banned.html).
@@ -171,28 +171,25 @@ def send_account_banned_email(
     return send_email_smtp(to_email, subject, html_content, text_content)
 
 
-def send_product_rejected_email(
+def send_password_reset_otp_email(
     to_email: str,
     user_name: str,
-    product_title: str,
-    reason: str,
-    edit_link: str = "https://unimarket.vn/seller/products"
+    otp_code: str,
+    expire_minutes: int = 5
 ) -> bool:
     """
-    Tình huống 4: Gửi email khi tin đăng bị từ chối phê duyệt (render product_rejected.html).
+    Tình huống 4: Gửi mã OTP đặt lại mật khẩu cho người dùng (render password_reset_otp.html).
     """
-    subject = f"[UniMarket] Tin đăng '{product_title}' chưa được phê duyệt"
+    subject = f"[UniMarket] {otp_code} là mã xác nhận đặt lại mật khẩu của bạn"
     html_content = render_email_template(
-        "product_rejected.html",
+        "password_reset_otp.html",
         user_name=user_name,
-        product_title=product_title,
-        reason=reason,
-        edit_link=edit_link
+        otp_code=otp_code,
+        expire_minutes=expire_minutes
     )
     text_content = (
         f"Xin chào {user_name},\n"
-        f"Tin đăng '{product_title}' của bạn chưa được phê duyệt.\n"
-        f"Lý do: {reason}\n"
-        f"Vui lòng truy cập {edit_link} để chỉnh sửa thông tin."
+        f"Mã OTP đặt lại mật khẩu UniMarket của bạn là: {otp_code}\n"
+        f"Mã có hiệu lực trong {expire_minutes} phút. Tuyệt đối không chia sẻ mã này cho ai khác."
     )
     return send_email_smtp(to_email, subject, html_content, text_content)

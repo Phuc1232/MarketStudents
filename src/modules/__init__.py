@@ -1,6 +1,10 @@
 from .User.models import User, userProfile, userStats, StudentVerification, IdentityVerification, Blacklist, SavedSearch, LoginHistory, Address, User_Providers
 from .User.schemas import User_Update, UserProfileResponse, UserProfileUpdate, AddressCreate, AddressResponse, MessageResponse, StudentOtpRequest, StudentCardUpload, StudentVerificationResponse, StudentOtpConfirm, SavedSearchCreate, SavedSearchResponse
-from .auth.schemas import Token, TokenData, Register, Register_response, GoogleAuthenRequest
+from .auth.schemas import (
+    Token, TokenData, Register, Register_response, GoogleAuthenRequest,
+    ForgotPasswordRequest, VerifyResetOtpRequest, VerifyResetOtpResponse,
+    ResetPasswordRequest, ForgotPasswordGeneralResponse
+)
 from .Product.models import ProductAttribute, Product, ProductImage, ProductCondition, ProductStatus, ProductView, Category, SubCategory,Attribute, AttributeOption
 from .Product.schemas import ProductAttributeValueInput, ProductCreate, ProductDetailResponse, ProductImageInput, ProductAttributeValueResponse, PaginatedProductsResponse, ProductListItemResponse, ProductImageResponse, ProductUpdate, SellerSummaryResponse, MyPurchaseItemResponse, PaginatedPurchasesResponse
 from .Interaction.models import Conversation, Comment, Message, MessageAttachment, Participation,Report, ReportReason,Notification, Follow, ReviewProductConversation, Favorite, SystemLog
