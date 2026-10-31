@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Query, Path
+from fastapi import APIRouter, Depends, status, Query, Path, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 
@@ -184,11 +184,18 @@ def get_report_detail_for_admin(
 async def resolve_report(
     report_id: int = Path(..., ge=1, description="ID phiếu tố cáo cần xử lý"),
     payload: ReportResolveRequest = ...,
+    background_tasks: BackgroundTasks = None,
     current_user: User = Depends(get_current_staff_or_admin),
     db: Session = Depends(get_db)
 ):
     """Giải quyết tố cáo vi phạm theo cơ chế linh hoạt tại Gate A (Seq 5 SRS)."""
-    return await resolve_user_report(report_id=report_id, payload=payload, current_admin=current_user, db=db)
+    return await resolve_user_report(
+        report_id=report_id,
+        payload=payload,
+        current_admin=current_user,
+        db=db,
+        background_tasks=background_tasks
+    )
 
 
 @router.post(
@@ -328,6 +335,7 @@ def get_user_detail_for_admin(
 async def update_user_status(
     user_id: int = Path(..., ge=1, description="ID người dùng"),
     payload: UserStatusUpdateRequest = ...,
+    background_tasks: BackgroundTasks = None,
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -337,7 +345,13 @@ async def update_user_status(
     - Nếu mở khóa: Gỡ khỏi Blacklist, đẩy WebSocket kích hoạt lại.
     - Chặn Admin tự khóa tài khoản của chính mình.
     """
-    return await update_user_active_status(user_id=user_id, payload=payload, current_admin=current_admin, db=db)
+    return await update_user_active_status(
+        user_id=user_id,
+        payload=payload,
+        current_admin=current_admin,
+        db=db,
+        background_tasks=background_tasks
+    )
 
 
 @router.patch(

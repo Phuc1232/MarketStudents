@@ -1,4 +1,5 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, BackgroundTasks
+from src.share.email_service import send_account_warning_email, send_account_banned_email
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select, func, and_, or_, desc
 from typing import Optional, List, Dict, Any
@@ -704,7 +705,8 @@ async def resolve_user_report(
     report_id: int,
     payload: ReportResolveRequest,
     current_admin: User,
-    db: Session
+    db: Session,
+    background_tasks: Optional[BackgroundTasks] = None
 ) -> ReportResolveResponse:
     """
     Giải quyết tố cáo vi phạm theo cơ chế linh hoạt thống nhất tại Gate A (Seq 5):
@@ -780,15 +782,6 @@ async def resolve_user_report(
             for active_prod in db.scalars(stmt_hide).all():
                 active_prod.status_id = 4  # Hidden
 
-            # Thông báo cho người vi phạm
-            violator_notif = send_system_notification(
-                user_id=violator_id,
-                title="Tài khoản của bạn đã bị khóa do vi phạm",
-                message=f"Tài khoản của bạn đã bị vô hiệu hóa vì: {payload.action_taken}. Bạn có thể gửi đơn kháng cáo CCCD qua ứng dụng UniMarket.",
-                action_link="/identity-verification/appeal",
-                db=db
-            )
-
             # Thêm vào danh sách đen nếu có yêu cầu
             if payload.add_blacklist:
                 # 1. Thêm Email
@@ -834,17 +827,29 @@ async def resolve_user_report(
 
     db.commit()
 
-    # Đẩy Real-time WebSocket:
-    # 1. Kích hoạt Force Logout cho kẻ gian lận nếu bị ban
-    if violator_notif and violator_id:
-        db.refresh(violator_notif)
-        await push_realtime_notification_safe(
-            user_id=violator_id,
-            notif=violator_notif,
-            tag="account_banned",
-            extra_data={"force_logout": True, "reason": payload.action_taken}
-        )
+    # Gửi Email thông báo xử phạt / cảnh cáo chạy ngầm trong BackgroundTasks
+    if background_tasks and violator_id:
+        violator_obj = db.get(User, violator_id)
+        if violator_obj and violator_obj.Email:
+            v_name = get_user_display_name(violator_obj)
+            if payload.ban_user:
+                background_tasks.add_task(
+                    send_account_banned_email,
+                    to_email=violator_obj.Email,
+                    user_name=v_name,
+                    reason=payload.action_taken,
+                    appeal_link="https://unimarket.vn/identity-verification/appeal"
+                )
+            else:
+                background_tasks.add_task(
+                    send_account_warning_email,
+                    to_email=violator_obj.Email,
+                    user_name=v_name,
+                    reason=payload.action_taken,
+                    details=payload.admin_notes or ""
+                )
 
+    # Đẩy Real-time WebSocket:
     # 2. Báo Toast kết quả cho người gửi tố cáo
     if reporter_notif:
         db.refresh(reporter_notif)
@@ -1464,7 +1469,8 @@ async def update_user_active_status(
     user_id: int,
     payload: UserStatusUpdateRequest,
     current_admin: User,
-    db: Session
+    db: Session,
+    background_tasks: Optional[BackgroundTasks] = None
 ) -> Dict[str, Any]:
     """
     Khóa hoặc Mở khóa tài khoản người dùng thủ công (BR-ADM-1, Use Case 2.3):
@@ -1579,6 +1585,18 @@ async def update_user_active_status(
         )
 
     db.commit()
+
+    # 🎯 Gửi Email thông báo khóa tài khoản chạy ngầm trong BackgroundTasks
+    if background_tasks and payload.is_active is False and user.Email:
+        u_name = get_user_display_name(user)
+        background_tasks.add_task(
+            send_account_banned_email,
+            to_email=user.Email,
+            user_name=u_name,
+            reason=payload.reason or "Vi phạm quy chế sàn UniMarket",
+            appeal_link="https://unimarket.vn/identity-verification/appeal"
+        )
+
     if user_notif:
         db.refresh(user_notif)
         tag = "account_banned" if payload.is_active is False else "account_unbanned"
