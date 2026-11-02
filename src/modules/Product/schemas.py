@@ -1,6 +1,7 @@
 from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
-
+from typing import Optional, List
+from datetime import datetime
 # ==============================================================================
 # ENUM SẮP XẾP SẢN PHẨM (SORTING)
 # ==============================================================================
@@ -9,9 +10,6 @@ class ProductSortBy(str, Enum):
     PRICE_ASC = "price_asc"   # Giá từ thấp đến cao (Tiết kiệm nhất)
     PRICE_DESC = "price_desc" # Giá từ cao đến thấp
     POPULAR = "popular"       # Phổ biến nhất (Xem nhiều nhất qua view_count)
-
-from typing import Optional, List
-from datetime import datetime
 
 
 class ProductAttributeValueInput(BaseModel):

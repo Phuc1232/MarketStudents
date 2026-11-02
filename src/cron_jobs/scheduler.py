@@ -5,23 +5,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from .trash_cleanup_job import run_cleanup_expired_trash_job
 
-# Đảm bảo an toàn mã hóa UTF-8 trên console Windows
-if hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except Exception:
-        pass
-
 # Cấu hình logger hiển thị ra terminal/console
 logger = logging.getLogger("unimarket.scheduler")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
 # Biến singleton quản lý Scheduler trong vòng đời FastAPI
 _scheduler: Optional[BackgroundScheduler] = None
 

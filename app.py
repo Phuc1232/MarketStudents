@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from src.middleware import RateLimitMiddleware
 from src.modules.auth import auth_controller
 from src.modules.User import user_controller
 from src.modules.Masterdata import masterdata_controller
@@ -25,6 +26,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# 1. Đăng ký Rate Limit Middleware (Chống DDoS, Brute-force & Spam OTP)
+app.add_middleware(RateLimitMiddleware)
+
+# 2. Đăng ký CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
