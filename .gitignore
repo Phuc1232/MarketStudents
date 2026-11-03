@@ -121,3 +121,21 @@ $RECYCLE.BIN/
 # Output Reports & Generated Artifacts
 # ============================================
 project_analysis_report.txt
+
+# ============================================
+# Terraform & Infrastructure
+# ============================================
+**/.terraform/*
+*.terraform*
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+
+# Local Uploaded Media (Development Fallback)
+static/uploads/media/*
+static/uploads/private/*
+!static/uploads/media/.gitkeep
+!static/uploads/private/.gitkeep

@@ -19,3 +19,10 @@ MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "UniMarket")
 # --- REDIS CONFIGURATION (Production / Optional Local) ---
 # Format: redis://:password@host:port/db (Leave empty to use in-memory RAM fallback)
 REDIS_URL = os.getenv("REDIS_URL", "").strip() or None
+
+# --- AWS S3 & MEDIA STORAGE CONFIGURATION ---
+AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-1")
+S3_MEDIA_BUCKET = os.getenv("S3_MEDIA_BUCKET", "").strip() or None
+S3_PRIVATE_DOCS_BUCKET = os.getenv("S3_PRIVATE_DOCS_BUCKET", "").strip() or None
+MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "").rstrip("/")
+UPLOAD_MAX_FILE_SIZE_MB = int(os.getenv("UPLOAD_MAX_FILE_SIZE_MB", "10"))

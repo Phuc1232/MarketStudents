@@ -55,3 +55,4 @@ watchfiles==1.1.1
 websockets==16.0
 
 redis==8.1.0
+boto3==1.43.123
