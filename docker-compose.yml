@@ -6,8 +6,8 @@ services:
     container_name: unimarket_db_container
     restart: always
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password123  # Mật khẩu DB (nhớ đổi nếu muốn)
+      - POSTGRES_USER= ${POSTGRES_USER:-unimarket}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password123} # Mật khẩu DB (nhớ đổi nếu muốn)
       - POSTGRES_DB=unimarket_db       # Tên Database của dự án
     ports:
       - "5431:5432"  
