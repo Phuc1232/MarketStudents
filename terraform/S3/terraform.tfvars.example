@@ -1,0 +1,17 @@
+# ==============================================================================
+# UNIMARKET - TERRAFORM CONFIGURATION EXAMPLE
+# Copy file này thành "terraform.tfvars" khi chạy thực tế (file đó sẽ được .gitignore bảo vệ)
+# ==============================================================================
+
+aws_region  = "ap-southeast-1"
+environment = "dev"
+project_name = "unimarket"
+
+# Tên Bucket S3 (Phải là duy nhất trên toàn cầu của AWS)
+# Để trống để Terraform tự động tạo tên: unimarket-media-dev-<random_id>
+media_bucket_name   = ""
+private_bucket_name = ""
+
+# Bật CloudFront CDN (True = tối ưu tốc độ & bảo mật OAC; False = chỉ dùng S3 trực tiếp)
+enable_cloudfront = true
+
