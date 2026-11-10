@@ -139,3 +139,17 @@ static/uploads/media/*
 static/uploads/private/*
 !static/uploads/media/.gitkeep
 !static/uploads/private/.gitkeep
+
+
+# Frontend - Dependencies
+frontend/node_modules/
+
+# Frontend - Build
+frontend/dist/
+
+# Frontend - Environment
+frontend/.env
+frontend/.env.local
+
+# Frontend - Vite cache
+frontend/.vite/
