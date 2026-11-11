@@ -1,0 +1,15 @@
+# Allow only backend source and migrations into the build context.
+**
+!Dockerfile
+!.dockerignore
+!requirements.txt
+!app.py
+!alembic.ini
+!src/
+!src/**
+!alembic/
+!alembic/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/*.env

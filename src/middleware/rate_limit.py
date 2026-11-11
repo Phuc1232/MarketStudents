@@ -131,6 +131,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     DEFAULT_GLOBAL_LIMIT = (100, 60)                  # Mặc định: 100 requests / 1 phút cho các endpoint khác
 
     EXEMPT_PATHS = {
+        "/health",
+        "/healthz",
         "/docs",
         "/redoc",
         "/openapi.json",

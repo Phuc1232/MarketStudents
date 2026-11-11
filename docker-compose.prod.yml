@@ -1,0 +1,66 @@
+version: '3.8'
+
+# ==============================================================================
+# UniMarket - Production Docker Compose (Sử dụng Amazon RDS PostgreSQL)
+# ==============================================================================
+name: unimarket-prod
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. In-memory Cache & OTP Storage (Redis 7)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: unimarket_redis_prod
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - unimarket_prod_net
+
+  # ----------------------------------------------------------------------------
+  # 2. UniMarket FastAPI Backend Application
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: unimarket-api:prod
+    container_name: unimarket_api_prod
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data_prod:/app/static/uploads
+    # Nạp toàn bộ cấu hình từ file .env (Bao gồm DATABASE_URL của RDS)
+    env_file:
+      - .env
+    # Ghi đè cấu hình nội bộ
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      AWS_EC2_METADATA_DISABLED: ${AWS_EC2_METADATA_DISABLED:-true}
+    networks:
+      - unimarket_prod_net
+
+# ------------------------------------------------------------------------------
+# Mạng nội bộ cách ly riêng cho môi trường Prod
+# ------------------------------------------------------------------------------
+networks:
+  unimarket_prod_net:
+    driver: bridge
+
+# ------------------------------------------------------------------------------
+# Ổ lưu trữ dữ liệu
+# ------------------------------------------------------------------------------
+volumes:
+  redis_data_prod:
+  uploads_data_prod:
