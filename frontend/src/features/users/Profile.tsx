@@ -3,12 +3,12 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import { api, District, errText, mediaUrl, Province, toast, useAuth, Ward } from '../../lib/api'
 
-interface Me { Email: string; account_type: string; isActive: boolean }
+interface Me { Email: string; account_type: string; isActive: boolean; role_id?: number }
 interface Prof { first_name?: string | null; last_name?: string | null; phone_number?: string | null; avatar_url?: string | null; bio?: string | null; type_mode?: string | null }
 interface Addr { address_id: number; ward_id: number; specific_name: string; type: string; is_default: boolean }
 
-type Tab = 'profile' | 'address' | 'security' | 'student'
-const TABS: [Tab, string][] = [['profile', 'Hồ sơ'], ['address', 'Địa chỉ'], ['security', 'Bảo mật'], ['student', 'Sinh viên']]
+type Tab = 'profile' | 'address' | 'security' | 'student' | 'reports'
+const TABS: [Tab, string][] = [['profile', 'Hồ sơ'], ['address', 'Địa chỉ'], ['security', 'Bảo mật'], ['student', 'Sinh viên'], ['reports', 'Báo cáo vi phạm']]
 
 export default function Profile() {
   const [sp, setSp] = useSearchParams()
@@ -34,6 +34,9 @@ export default function Profile() {
           <div className="hint">{me?.Email}{me?.account_type === 'Sinh Vien' && <span className="chip chip-soft">Sinh viên đã xác minh</span>}</div>
         </div>
         <div className="pf-links">
+          {(me?.role_id === 1 || me?.role_id === 4 || me?.account_type === 'Admin' || me?.account_type === 'Staff') && (
+            <Link to="/admin" className="btn btn-primary btn-sm"><Icon name="shield" size={16} /> Quản trị sàn</Link>
+          )}
           <Link to="/notifications" className="btn btn-ghost btn-sm"><Icon name="bell" size={16} /> Thông báo</Link>
           <Link to="/my-products" className="btn btn-ghost btn-sm"><Icon name="tag" size={16} /> Tin của tôi</Link>
           <button className="btn btn-ghost btn-sm" onClick={() => { logout(); nav('/') }}><Icon name="logout" size={16} /> Đăng xuất</button>
@@ -49,6 +52,7 @@ export default function Profile() {
         {tab === 'address' && <Addresses />}
         {tab === 'security' && <Security />}
         {tab === 'student' && <Student verified={me?.account_type === 'Sinh Vien'} onVerified={() => setMe((m) => (m ? { ...m, account_type: 'Sinh Vien' } : m))} />}
+        {tab === 'reports' && <ReportsList />}
       </div>
     </div>
   )
@@ -214,6 +218,59 @@ function Student({ verified, onVerified }: { verified: boolean; onVerified: () =
       <div className="or">— hoặc nếu trường không có email —</div>
       {cardDone ? <div className="form-ok">Đã nhận ảnh thẻ sinh viên của bạn, chờ quản trị viên duyệt.</div> : (
         <label className="btn btn-ghost">Tải ảnh thẻ sinh viên<input type="file" accept="image/png,image/jpeg,application/pdf" hidden onChange={uploadCard} /></label>
+      )}
+    </div>
+  )
+}
+
+interface UserReport { report_id: number; target_type: string; target_id: number; reason_content: string; status: string; created_at: string }
+
+function ReportsList() {
+  const [reports, setReports] = useState<UserReport[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get<UserReport[]>('/interaction/reports/me')
+      .then(setReports)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const statusTone: Record<string, string> = {
+    Pending: 'warn',
+    Resolved: 'ok',
+    Dismissed: 'muted'
+  }
+  const statusLabel: Record<string, string> = {
+    Pending: 'Đang xử lý',
+    Resolved: 'Đã giải quyết',
+    Dismissed: 'Đã bác bỏ'
+  }
+
+  return (
+    <div className="card">
+      <p className="hint" style={{ marginBottom: 16 }}>Theo dõi tiến độ xử lý các phiếu tố cáo bạn đã gửi tới Ban Quản Trị sàn.</p>
+      {loading ? (
+        <div className="loading">Đang tải danh sách...</div>
+      ) : reports.length === 0 ? (
+        <p className="hint">Bạn chưa gửi báo cáo vi phạm nào.</p>
+      ) : (
+        <div className="mp-list">
+          {reports.map((r) => (
+            <div key={r.report_id} className="mp-row" style={{ padding: '12px 16px' }}>
+              <div className="mp-main">
+                <div style={{ fontWeight: 600 }}>Đối tượng: {r.target_type === 'Product' ? 'Tin đăng' : r.target_type === 'User' ? 'Người dùng' : 'Bình luận'} #{r.target_id}</div>
+                <div className="mp-meta">
+                  <span>Lý do: <b>{r.reason_content}</b></span>
+                  <span>{new Date(r.created_at).toLocaleDateString('vi-VN')}</span>
+                </div>
+              </div>
+              <span className={`badge badge-${statusTone[r.status] ?? 'muted'}`}>
+                {statusLabel[r.status] ?? r.status}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

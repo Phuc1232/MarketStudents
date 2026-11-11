@@ -58,7 +58,8 @@ export default function PostProduct() {
     if (!f.subId) return setErr('Hãy chọn danh mục.')
     setBusy(true)
     try {
-      const attributes = attrs.flatMap((a) => {
+      interface AttrPayload { attribute_id: number; value_text: string | null; value_num: string }
+      const attributes: AttrPayload[] = attrs.flatMap((a): AttrPayload[] => {
         const v = (attrVals[a.attribute_id] ?? '').trim()
         if (!v) return []
         return a.data_type === 'number' ? [{ attribute_id: a.attribute_id, value_text: null, value_num: v }] : [{ attribute_id: a.attribute_id, value_text: v, value_num: '' }]

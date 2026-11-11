@@ -1,7 +1,8 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
-import { api, ApiError, setToken, toast } from '../../lib/api'
+import { api, ApiError, getUserAccountType, getUserRole, setToken, toast } from '../../lib/api'
+import GoogleLoginButton from './GoogleLoginButton'
 
 function Brand() {
   return (
@@ -78,23 +79,69 @@ export default function Login() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [forgot, setForgot] = useState(false)
+  const [banned, setBanned] = useState(false)
+
+  const redirectAfterLogin = () => {
+    const role = getUserRole()
+    const accType = getUserAccountType()
+    const isAdm = role === 1 || role === 4 || accType === 'Admin' || accType === 'Staff'
+
+    if (isAdm) {
+      nav('/admin', { replace: true })
+    } else {
+      const next = sp.get('next')
+      if (next && next.startsWith('/') && !next.startsWith('/admin')) {
+        nav(next, { replace: true })
+      } else {
+        nav('/', { replace: true })
+      }
+    }
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    setErr(''); setBusy(true)
+    setErr(''); setBusy(true); setBanned(false)
     try {
       const r = await api.login(email.trim(), pw)
       setToken(r.access_token)
-      const next = sp.get('next')
-      nav(next && next.startsWith('/') ? next : '/', { replace: true })
+      redirectAfterLogin()
     } catch (e2) {
       if (e2 instanceof ApiError && e2.status === 403) {
         const d = (e2.data as any)?.detail
-        setErr(d?.message ?? 'Tài khoản của bạn đã bị khóa.')
+        if (d?.appeal_token) {
+          sessionStorage.setItem('cm_appeal_token', d.appeal_token)
+          setBanned(true)
+        }
+        setErr(d?.message ?? 'Tài khoản của bạn đã bị khóa do vi phạm quy chế.')
       } else if (e2 instanceof ApiError && e2.status === 404) {
         setErr('Sai email hoặc mật khẩu.')
       } else setErr(e2 instanceof Error ? e2.message : 'Đăng nhập thất bại')
     } finally { setBusy(false) }
+  }
+
+  const onGoogleSuccess = async (idToken: string) => {
+    setErr(''); setBusy(true); setBanned(false)
+    try {
+      const r = await api.loginGoogle(idToken)
+      setToken(r.access_token)
+      toast('Đăng nhập bằng Google thành công!')
+      redirectAfterLogin()
+    } catch (e2) {
+      if (e2 instanceof ApiError && e2.status === 403) {
+        const d = (e2.data as any)?.detail
+        if (d?.appeal_token) {
+          sessionStorage.setItem('cm_appeal_token', d.appeal_token)
+          setBanned(true)
+        }
+        setErr(typeof d === 'string' ? d : d?.message ?? 'Tài khoản Google này đã bị khóa hoặc chặn khỏi hệ thống.')
+      } else if (e2 instanceof ApiError && e2.status === 401) {
+        setErr(e2.message || 'Xác thực tài khoản Google thất bại hoặc phiên đã hết hạn.')
+      } else {
+        setErr(e2 instanceof Error ? e2.message : 'Đăng nhập bằng Google thất bại.')
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -106,12 +153,31 @@ export default function Login() {
             <h1>Chào mừng quay lại</h1>
             <p className="auth-sub">Đăng nhập để mua bán, nhắn tin và lưu món yêu thích.</p>
             {err && <div className="form-error" role="alert">{err}</div>}
+            {banned && (
+              <div style={{ marginBottom: 16 }}>
+                <Link to="/appeal" className="btn btn-soft btn-block" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Icon name="shield" size={16} /> Gửi hồ sơ kháng cáo mở khóa
+                </Link>
+              </div>
+            )}
             <form onSubmit={submit}>
               <div className="field"><label htmlFor="l-email">Email</label><input id="l-email" className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="ban@email.com" /></div>
               <div className="field"><label htmlFor="l-pw">Mật khẩu</label><input id="l-pw" className="input" type="password" required value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" /></div>
               <div className="auth-row"><button type="button" className="link-btn" onClick={() => setForgot(true)}>Quên mật khẩu?</button></div>
               <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Đang đăng nhập...' : 'Đăng nhập'}</button>
             </form>
+
+            <div className="auth-divider">
+              <span>hoặc tiếp tục với</span>
+            </div>
+
+            <GoogleLoginButton
+              text="signin_with"
+              disabled={busy}
+              onSuccess={onGoogleSuccess}
+              onError={(msg) => setErr(msg)}
+            />
+
             <p className="auth-switch">Chưa có tài khoản? <Link to="/register">Đăng ký ngay</Link></p>
           </>
         )}

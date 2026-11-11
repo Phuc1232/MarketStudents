@@ -12,3 +12,72 @@
 .steps span.on { background: var(--forest); }
 .otp-input { text-align: center; letter-spacing: .5em; font-size: 22px; font-weight: 700; }
 .auth-back { display: inline-flex; gap: 6px; align-items: center; margin-bottom: 14px; color: var(--muted); font-size: 13.5px; background: none; border: 0; padding: 0; }
+
+/* Đường kẻ phân cách "hoặc tiếp tục với" */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--line);
+}
+.auth-divider span {
+  padding: 0 14px;
+}
+
+/* Khu vực nút Google */
+.google-auth-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.google-btn-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+}
+.google-btn-container > div {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+.google-btn-container iframe {
+  margin: 0 auto !important;
+}
+.google-fallback-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #ffffff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  height: 44px;
+  padding: 0 16px;
+  cursor: pointer;
+  transition: background-color .2s, border-color .2s, box-shadow .2s;
+  box-shadow: 0 1px 2px rgba(60,64,67,0.08);
+}
+.google-fallback-btn:hover:not(:disabled) {
+  background: #f8fafd;
+  border-color: #c2c7d0;
+  box-shadow: 0 1px 3px rgba(60,64,67,0.15);
+}
+.google-fallback-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

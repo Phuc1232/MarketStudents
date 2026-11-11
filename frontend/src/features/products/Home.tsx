@@ -2,12 +2,14 @@ import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import ProductCard from '../../components/ui/ProductCard'
-import { api, Category, CONDITIONS, errText, Paginated, ProductListItem, toast, useAuth } from '../../lib/api'
+import { api, Category, CONDITIONS, District, errText, Paginated, ProductListItem, Province, toast, useAuth } from '../../lib/api'
 
 const PAGE_SIZE = 12
 const FALLBACK_TRENDING = ['giáo trình', 'máy tính', 'đèn học']
 
-function Hero({ onSearch, trending }: { onSearch: (q: string) => void; trending: string[] }) {
+interface SavedSearch { search_id: number; keyword: string }
+
+function Hero({ onSearch, trending, history, onDeleteHistory }: { onSearch: (q: string) => void; trending: string[]; history?: SavedSearch[]; onDeleteHistory?: (id: number) => void }) {
   const [q, setQ] = useState('')
   const submit = (e: FormEvent) => { e.preventDefault(); onSearch(q.trim()) }
   return (
@@ -25,6 +27,21 @@ function Hero({ onSearch, trending }: { onSearch: (q: string) => void; trending:
           <span>Đang được tìm:</span>
           {trending.slice(0, 3).map((t) => <button key={t} type="button" onClick={() => onSearch(t)}>{t}</button>)}
         </div>
+        {history && history.length > 0 && (
+          <div className="hero-trending" style={{ marginTop: 8 }}>
+            <span>Đã tìm gần đây:</span>
+            {history.slice(0, 4).map((h) => (
+              <span key={h.search_id} className="chip chip-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px' }}>
+                <span onClick={() => onSearch(h.keyword)} style={{ cursor: 'pointer' }}>{h.keyword}</span>
+                {onDeleteHistory && (
+                  <button type="button" onClick={() => onDeleteHistory(h.search_id)} aria-label="Xóa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex', padding: 0 }}>
+                    <Icon name="x" size={12} />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="hero-art" aria-hidden="true">
@@ -45,6 +62,9 @@ export default function Home() {
   const { loggedIn } = useAuth()
   const [sp, setSp] = useSearchParams()
   const [cats, setCats] = useState<Category[]>([])
+  const [provinces, setProvinces] = useState<Province[]>([])
+  const [districts, setDistricts] = useState<District[]>([])
+  const [history, setHistory] = useState<SavedSearch[]>([])
   const [trending, setTrending] = useState<string[]>(FALLBACK_TRENDING)
   const [items, setItems] = useState<ProductListItem[]>([])
   const [total, setTotal] = useState(0)
@@ -59,6 +79,8 @@ export default function Home() {
   const cond = sp.get('condition_id') ?? ''
   const minP = sp.get('min_price') ?? ''
   const maxP = sp.get('max_price') ?? ''
+  const provinceId = sp.get('province_id') ?? ''
+  const districtId = sp.get('district_id') ?? ''
 
   const setParam = (patch: Record<string, string>) => {
     const n = new URLSearchParams(sp)
@@ -69,25 +91,43 @@ export default function Home() {
   useEffect(() => {
     api.get<Category[]>('/masterdata/category/sub').then(setCats).catch(() => {})
     api.get<string[]>('/product/search/suggestions').then((s) => s?.length && setTrending(s)).catch(() => {})
+    api.get<Province[]>('/masterdata/provinces').then(setProvinces).catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (!loggedIn) { setFavs(new Set()); return }
+    setDistricts([])
+    if (provinceId) {
+      api.get<District[]>(`/masterdata/provinces/${provinceId}/districts`).then(setDistricts).catch(() => {})
+    }
+  }, [provinceId])
+
+  useEffect(() => {
+    if (!loggedIn) { setFavs(new Set()); setHistory([]); return }
     api.get<Paginated<{ product_id: number }>>('/interaction/my-favorite', { page: 1, page_size: 100 })
       .then((r) => setFavs(new Set(r.items.map((i) => i.product_id)))).catch(() => {})
+    api.get<SavedSearch[]>('/user/search-history').then(setHistory).catch(() => {})
   }, [loggedIn])
+
+  const deleteHistory = async (id: number) => {
+    try {
+      await api.del(`/user/search-history/${id}`)
+      setHistory((prev) => prev.filter((h) => h.search_id !== id))
+    } catch { /* bỏ qua */ }
+  }
 
   const load = useCallback(async (p: number, replace: boolean) => {
     setLoading(true)
     try {
       const r = await api.get<Paginated<ProductListItem>>('/product', {
         keyword, category_id: categoryId, sub_category_id: subId, sort_by: sort,
-        condition_id: cond, min_price: minP, max_price: maxP, page: p, page_size: PAGE_SIZE,
+        condition_id: cond, min_price: minP, max_price: maxP,
+        province_id: provinceId || undefined, district_id: districtId || undefined,
+        page: p, page_size: PAGE_SIZE,
       })
       setItems((old) => (replace ? r.items : [...old, ...r.items]))
       setTotal(r.total); setPage(p)
     } catch (e) { toast(errText(e), 'err') } finally { setLoading(false) }
-  }, [keyword, categoryId, subId, sort, cond, minP, maxP])
+  }, [keyword, categoryId, subId, sort, cond, minP, maxP, provinceId, districtId])
 
   useEffect(() => { load(1, true) }, [load])
 
@@ -96,7 +136,11 @@ export default function Home() {
 
   const search = (q: string) => {
     setParam({ keyword: q })
-    if (q && loggedIn) api.post('/user/search-history', { keyword: q }).catch(() => {})
+    if (q && loggedIn) {
+      api.post<SavedSearch>('/user/search-history', { keyword: q })
+        .then((created) => setHistory((prev) => [created, ...prev.filter((h) => h.keyword !== q)].slice(0, 10)))
+        .catch(() => {})
+    }
     setTimeout(() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' }), 60)
   }
 
@@ -109,11 +153,11 @@ export default function Home() {
   }
 
   const activeCat = cats.find((c) => String(c.category_id) === categoryId)
-  const hasFilter = !!(keyword || categoryId || subId || cond || minP || maxP)
+  const hasFilter = !!(keyword || categoryId || subId || cond || minP || maxP || provinceId || districtId)
 
   return (
     <>
-      <div className="container"><Hero onSearch={search} trending={trending} /></div>
+      <div className="container"><Hero onSearch={search} trending={trending} history={history} onDeleteHistory={deleteHistory} /></div>
 
       <section className="container browse">
         <div className="section-head">
@@ -150,6 +194,16 @@ export default function Home() {
               <option value="price_desc">Giá cao → thấp</option>
               <option value="popular">Xem nhiều nhất</option>
             </select>
+            <select className="select" value={provinceId} onChange={(e) => setParam({ province_id: e.target.value, district_id: '' })} aria-label="Tỉnh / Thành phố">
+              <option value="">Tất cả Tỉnh/Thành</option>
+              {provinces.map((p) => <option key={p.province_id} value={p.province_id}>{p.province_name}</option>)}
+            </select>
+            {districts.length > 0 && (
+              <select className="select" value={districtId} onChange={(e) => setParam({ district_id: e.target.value })} aria-label="Quận / Huyện">
+                <option value="">Tất cả Quận/Huyện</option>
+                {districts.map((d) => <option key={d.district_id} value={d.district_id}>{d.district_name}</option>)}
+              </select>
+            )}
             <select className="select" value={cond} onChange={(e) => setParam({ condition_id: e.target.value })} aria-label="Tình trạng">
               <option value="">Mọi tình trạng</option>
               {Object.entries(CONDITIONS).map(([id, n]) => <option key={id} value={id}>{n}</option>)}

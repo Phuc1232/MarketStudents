@@ -30,8 +30,14 @@ OTP_EXPIRE_SECONDS = 300         # Mã OTP có hiệu lực 5 phút (300s)
 
 
 def verify_login_google(data: GoogleAuthenRequest, db: Session = Depends(get_db)):
+    client_id = (GOOGLE_CLIENT_ID or "").strip("\"' ")
     try: 
-        info_user = id_token.verify_oauth2_token(data.id_token, requests.Request(), GOOGLE_CLIENT_ID)
+        info_user = id_token.verify_oauth2_token(
+            data.id_token,
+            requests.Request(),
+            client_id,
+            clock_skew_in_seconds=60,
+        )
         user_email = info_user.get("email")
         google_subject_id = info_user.get("sub")
         full_name = info_user.get("name", "")
@@ -91,11 +97,15 @@ def verify_login_google(data: GoogleAuthenRequest, db: Session = Depends(get_db)
             )
 
         access_token_expire = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
-        access_token = create_access_token({"user_id": user.id}, access_token_expire)
+        access_token = create_access_token(
+            {"user_id": user.id, "role_id": user.role_id, "account_type": user.account_type},
+            access_token_expire
+        )
         
         return Token(access_token=access_token, token_type="bearer")
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Token Google không hợp lệ hoặc đã hết hạn")
+    except ValueError as e:
+        print(f"[GOOGLE_LOGIN_ERROR] ValueError: {e}", flush=True)
+        raise HTTPException(status_code=401, detail=f"Token Google không hợp lệ hoặc đã hết hạn: {e}")
 
 
 # ==============================================================================

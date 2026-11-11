@@ -22,6 +22,7 @@ export default function ProductDetail() {
   const [comments, setComments] = useState<Comment[]>([])
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<number | null>(null)
+  const [reporting, setReporting] = useState(false)
 
   const loadComments = useCallback(() => {
     api.get<Comment[]>(`/interaction/product/${id}/comments`).then(setComments).catch(() => {})
@@ -132,17 +133,24 @@ export default function ProductDetail() {
               <button className="btn btn-primary" onClick={startChat} disabled={p.status_id === 3}><Icon name="chat" size={18} /> Nhắn tin cho người bán</button>
             )}
             <button className={`btn btn-ghost fav-btn${faved ? ' on' : ''}`} onClick={toggleFav} aria-pressed={faved}><Icon name="heart" size={18} /> {faved ? 'Đã yêu thích' : 'Yêu thích'}</button>
+            {!mine && (
+              <button className="btn btn-ghost" onClick={() => (loggedIn ? setReporting(true) : needLogin())} title="Báo cáo vi phạm">
+                <Icon name="flag" size={18} /> Báo cáo
+              </button>
+            )}
           </div>
 
           <div className="pd-seller">
-            <span className="avatar lg">{sellerName.slice(0, 1).toUpperCase()}</span>
-            <div>
-              <b>{sellerName}</b>
-              <div className="hint">
-                {p.seller?.account_type === 'Sinh Vien' && <span className="chip chip-soft">Sinh viên đã xác minh</span>}{' '}
-                {rating && rating.total > 0 ? <span><Icon name="star" size={13} /> {rating.avg} ({rating.total} đánh giá)</span> : 'Chưa có đánh giá'}
+            <Link to={`/seller?id=${p.seller_id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="avatar lg">{sellerName.slice(0, 1).toUpperCase()}</span>
+              <div>
+                <b>{sellerName}</b>
+                <div className="hint">
+                  {p.seller?.account_type === 'Sinh Vien' && <span className="chip chip-soft">Sinh viên đã xác minh</span>}{' '}
+                  {rating && rating.total > 0 ? <span><Icon name="star" size={13} /> {rating.avg} ({rating.total} đánh giá)</span> : 'Chưa có đánh giá'}
+                </div>
               </div>
-            </div>
+            </Link>
             {!mine && <button className="btn btn-ghost btn-sm" onClick={toggleFollow}>{following ? 'Đang theo dõi' : 'Theo dõi'}</button>}
           </div>
 
@@ -172,6 +180,71 @@ export default function ProductDetail() {
           <div key={c.comment_id} className="comment-thread">{renderComment(c)}{c.replies.map((r) => renderComment(r, true))}</div>
         ))}
       </section>
+
+      {reporting && <ReportModal targetType="Product" targetId={id} onClose={() => setReporting(false)} />}
+    </div>
+  )
+}
+
+interface ReportReason { reason_id: number; content: string }
+
+function ReportModal({ targetType, targetId, onClose }: { targetType: 'Product' | 'User' | 'Comment'; targetId: number; onClose: () => void }) {
+  const [reasons, setReasons] = useState<ReportReason[]>([])
+  const [selectedReason, setSelectedReason] = useState<number | ''>('')
+  const [desc, setDesc] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    api.get<ReportReason[]>('/interaction/report-reasons')
+      .then((res) => {
+        setReasons(res)
+        if (res.length > 0) setSelectedReason(res[0].reason_id)
+      })
+      .catch((e) => setErr(errText(e)))
+  }, [])
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!selectedReason) return setErr('Vui lòng chọn lý do báo cáo')
+    setBusy(true); setErr('')
+    try {
+      await api.post('/interaction/reports', {
+        target_type: targetType,
+        target_id: targetId,
+        reason_id: Number(selectedReason),
+        description: desc.trim() || null
+      })
+      toast('Đã gửi báo cáo vi phạm. Quản trị viên sẽ xử lý sớm nhất.')
+      onClose()
+    } catch (e2) {
+      setErr(errText(e2))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h3>Báo cáo vi phạm</h3>
+        <p className="hint">Giúp xây dựng cộng đồng UniMarket minh bạch, an toàn.</p>
+        {err && <div className="form-error">{err}</div>}
+        <div className="field">
+          <label htmlFor="r-reason">Lý do vi phạm</label>
+          <select id="r-reason" className="select" required value={selectedReason} onChange={(e) => setSelectedReason(Number(e.target.value))}>
+            {reasons.map((r) => <option key={r.reason_id} value={r.reason_id}>{r.content}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="r-desc">Mô tả thêm bằng chứng (tùy chọn)</label>
+          <textarea id="r-desc" className="textarea" rows={3} maxLength={1000} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ví dụ: Người bán yêu cầu chuyển cọc rồi chặn liên lạc..." />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn btn-danger" disabled={busy}>{busy ? 'Đang gửi...' : 'Gửi báo cáo'}</button>
+        </div>
+      </form>
     </div>
   )
 }

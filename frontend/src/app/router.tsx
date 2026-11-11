@@ -4,6 +4,7 @@ import MainLayout from '../components/layouts/MainLayout'
 import { useAuth } from '../lib/api'
 import Login from '../features/auth/Login'
 import Register from '../features/auth/Register'
+import Appeal from '../features/auth/Appeal'
 import Home from '../features/products/Home'
 import ProductDetail from '../features/products/ProductDetail'
 import PostProduct from '../features/products/PostProduct'
@@ -12,12 +13,23 @@ import Favorites from '../features/products/Favorites'
 import Messages from '../features/chat/Messages'
 import Notifications from '../features/notifications/Notifications'
 import Profile from '../features/users/Profile'
+import SellerProfile from '../features/users/SellerProfile'
+import AdminPortal from '../features/admin/AdminPortal'
 
 /** Chặn trang cần đăng nhập → đẩy về /login và quay lại sau khi đăng nhập. */
 function RequireAuth({ children }: { children: ReactElement }) {
   const { loggedIn } = useAuth()
   const loc = useLocation()
   if (!loggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  return children
+}
+
+/** Chặn trang Admin: Chỉ cho phép tài khoản Admin/Staff (role 1, 4) truy cập; các tài khoản khác bị đẩy về trang chủ. */
+function RequireAdmin({ children }: { children: ReactElement }) {
+  const { loggedIn, isAdmin } = useAuth()
+  const loc = useLocation()
+  if (!loggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  if (!isAdmin) return <Navigate to="/" replace />
   return children
 }
 
@@ -38,10 +50,17 @@ function page(path: string, element: ReactElement, auth = false): RouteObject[] 
   return [{ path, element: el }, { path: `${path}.html`, element: el }]
 }
 
+function adminPage(path: string, element: ReactElement): RouteObject[] {
+  const el = <RequireAdmin>{element}</RequireAdmin>
+  return [{ path, element: el }, { path: `${path}.html`, element: el }]
+}
+
 export const router = createBrowserRouter([
-  // Trang không có header/footer
+  // Trang độc lập không có header/footer của khách mua hàng
   ...page('/login', <Login />),
   ...page('/register', <Register />),
+  ...page('/appeal', <Appeal />),
+  ...adminPage('/admin', <AdminPortal />),
   {
     element: <MainLayout />,
     children: [
@@ -53,6 +72,7 @@ export const router = createBrowserRouter([
       ...page('/messages', <Messages />, true),
       ...page('/notifications', <Notifications />, true),
       ...page('/profile', <Profile />, true),
+      ...page('/seller', <SellerProfile />),
       { path: '*', element: <NotFound /> },
     ],
   },

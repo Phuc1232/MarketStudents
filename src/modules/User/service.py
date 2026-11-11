@@ -147,7 +147,7 @@ def authenticate_user(username: str, password: str ,db: Session= Depends(get_db)
             }
         )
     access_token_expire= timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
-    access_token=create_access_token({"user_id":user.id}, access_token_expire)
+    access_token=create_access_token({"user_id": user.id, "role_id": user.role_id, "account_type": user.account_type}, access_token_expire)
     
     return Token(access_token=access_token, token_type="bearer")
 

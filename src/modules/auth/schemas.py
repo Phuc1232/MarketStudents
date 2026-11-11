@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator, ConfigDict
 from datetime import datetime
 from typing import Optional
 
@@ -13,10 +13,14 @@ class Register(BaseModel):
     account_type: str
 
 class Register_response(BaseModel):
+    id: Optional[int] = None
     Email: EmailStr
     isActive: bool
     CreatedAt: datetime
     account_type: str
+    role_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):

@@ -7,8 +7,8 @@ import { resolve } from 'node:path'
 const BACKEND = process.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 const pages = [
-  'index', 'login', 'register', 'product', 'post', 'my-products',
-  'favorites', 'messages', 'notifications', 'profile',
+  'index', 'login', 'register', 'appeal', 'admin', 'product', 'post', 'my-products',
+  'favorites', 'messages', 'notifications', 'profile', 'seller',
 ]
 
 export default defineConfig({

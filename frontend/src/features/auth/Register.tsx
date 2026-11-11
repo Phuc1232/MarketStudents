@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import { api, ApiError, setToken, toast } from '../../lib/api'
+import GoogleLoginButton from './GoogleLoginButton'
 
 export default function Register() {
   const nav = useNavigate()
@@ -30,6 +31,28 @@ export default function Register() {
     } finally { setBusy(false) }
   }
 
+  const onGoogleSuccess = async (idToken: string) => {
+    setErr('')
+    setBusy(true)
+    try {
+      const r = await api.loginGoogle(idToken)
+      setToken(r.access_token)
+      toast('Đăng nhập bằng Google thành công! Xác minh sinh viên để tăng độ tin cậy nhé.')
+      nav('/profile?tab=student', { replace: true })
+    } catch (e2) {
+      if (e2 instanceof ApiError && e2.status === 403) {
+        const d = (e2.data as any)?.detail
+        setErr(typeof d === 'string' ? d : d?.message ?? 'Tài khoản Google này đã bị khóa hoặc chặn.')
+      } else if (e2 instanceof ApiError && e2.status === 401) {
+        setErr(e2.message || 'Xác thực tài khoản Google thất bại hoặc phiên đã hết hạn.')
+      } else {
+        setErr(e2 instanceof Error ? e2.message : 'Đăng ký bằng Google thất bại.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -46,6 +69,18 @@ export default function Register() {
           <div className="field"><label htmlFor="r-pw2">Nhập lại mật khẩu</label><input id="r-pw2" className="input" type="password" required value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" /></div>
           <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Đang tạo...' : 'Đăng ký'}</button>
         </form>
+
+        <div className="auth-divider">
+          <span>hoặc tiếp tục với</span>
+        </div>
+
+        <GoogleLoginButton
+          text="signup_with"
+          disabled={busy}
+          onSuccess={onGoogleSuccess}
+          onError={(msg) => setErr(msg)}
+        />
+
         <p className="auth-switch">Đã có tài khoản? <Link to="/login">Đăng nhập</Link></p>
       </div>
     </div>

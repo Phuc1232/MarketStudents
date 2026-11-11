@@ -146,6 +146,7 @@ def search_products(
     keyword: Optional[str] = None,
     category_id: Optional[int] = None,
     sub_category_id: Optional[int] = None,
+    seller_id: Optional[int] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     condition_id: Optional[int] = None,
@@ -169,6 +170,9 @@ def search_products(
     
     if status_id is not None:
         query = query.where(Product.status_id == status_id)
+
+    if seller_id is not None:
+        query = query.where(Product.seller_id == seller_id)
 
     # 1. XỬ LÝ TÌM KIẾM TỪ KHÓA (TIẾNG VIỆT KHÔNG DẤU + FUZZY TYPO TOLERANCE)
     relevance_score_expr = None
