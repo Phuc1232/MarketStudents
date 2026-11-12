@@ -54,6 +54,7 @@ downloads/
 eggs/
 .eggs/
 /lib/
+.env.production
 lib64/
 parts/
 sdist/

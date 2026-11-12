@@ -93,7 +93,7 @@ class ProductDetailResponse(BaseModel):
     condition_id: int
     seller_id: int
     buyer_id: Optional[int] = None
-    view_count: int = 0
+    view_count: Optional[int] = 0
     deleted_at: Optional[datetime] = None
     CreatedAt: Optional[datetime] = None
 
@@ -112,7 +112,7 @@ class ProductListItemResponse(BaseModel):
     status_id: int
     condition_id: int
     seller_id: int
-    view_count: int = 0
+    view_count: Optional[int] = 0
     CreatedAt: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
