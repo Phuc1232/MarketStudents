@@ -45,7 +45,7 @@ async def upload_multiple_images(
     for file in files:
         res = await storage_service.upload_media_image(file)
         uploaded_images.append({
-            "image_url": res["thumbnail_url"],
+            "image_url": res["raw_url"],
             "detail_url": res["detail_url"],
             "raw_url": res["raw_url"],
             "file_id": res["file_id"]
