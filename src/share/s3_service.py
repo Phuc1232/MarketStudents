@@ -127,7 +127,7 @@ class StorageService:
 
                 return {
                     "file_id": file_id,
-                    "image_url": thumbnail_url,
+                    "image_url": raw_url,
                     "thumbnail_url": thumbnail_url,
                     "detail_url": detail_url,
                     "raw_url": raw_url,
