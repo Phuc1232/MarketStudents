@@ -304,7 +304,7 @@ export default function Messages() {
     finally { if (mountedRef.current && accountRef.current === account) setUploading(false) }
   }
   return (
-    <div className="container page">
+    <div className="container page chat-page">
       <div className="page-head"><div><h1>Tin nhắn</h1></div></div>
       <div className={`chat${active ? ' open' : ''}`}>
         <aside className="chat-list" aria-label="Danh sách hội thoại">

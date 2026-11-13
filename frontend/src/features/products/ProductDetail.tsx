@@ -104,7 +104,7 @@ export default function ProductDetail() {
   )
 
   return (
-    <div className="container page">
+    <div className="container page product-detail-page">
       <nav className="crumbs"><Link to="/">Trang chủ</Link> / <span>{p.title}</span></nav>
 
       <div className="pd">
@@ -130,7 +130,7 @@ export default function ProductDetail() {
             {mine ? (
               <Link to="/my-products" className="btn btn-soft">Quản lý tin này</Link>
             ) : (
-              <button className="btn btn-primary" onClick={startChat} disabled={p.status_id === 3}><Icon name="chat" size={18} /> Nhắn tin cho người bán</button>
+              <button className="btn btn-primary product-chat-button" onClick={startChat} disabled={p.status_id === 3}><Icon name="chat" size={18} /> Nhắn tin cho người bán</button>
             )}
             <button className={`btn btn-ghost fav-btn${faved ? ' on' : ''}`} onClick={toggleFav} aria-pressed={faved}><Icon name="heart" size={18} /> {faved ? 'Đã yêu thích' : 'Yêu thích'}</button>
             {!mine && (

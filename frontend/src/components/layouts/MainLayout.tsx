@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Icon from '../ui/Icon'
+import MobileBottomNav from './MobileBottomNav'
 import { useAuth } from '../../lib/api'
 import { useRealtime } from '../../providers/RealtimeProvider'
 import NotificationDropdown from '../../features/notifications/NotificationDropdown'
@@ -16,13 +17,15 @@ export default function MainLayout() {
   useEffect(() => { if (loc.pathname === '/' || loc.pathname === '/index.html') setQ(sp.get('keyword') ?? '') }, [loc.pathname, sp])
   useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
 
+  const chatRoom = /^\/messages(?:\.html)?$/.test(loc.pathname) && Number(sp.get('c')) > 0
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     nav(q.trim() ? `/?keyword=${encodeURIComponent(q.trim())}#products` : '/')
   }
 
   return (
-    <>
+    <div className={`app-shell${chatRoom ? ' chat-room' : ''}`}>
       <header className="site-header">
         <div className="header-inner">
           <Link to="/" className="brand" aria-label="chợmình – trang chủ">
@@ -76,6 +79,7 @@ export default function MainLayout() {
         </div>
         <div className="footer-copy">© {new Date().getFullYear()} chợmình – Market for Students</div>
       </footer>
-    </>
+      <MobileBottomNav />
+    </div>
   )
 }

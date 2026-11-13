@@ -61,6 +61,7 @@ export default function Home() {
   const nav = useNavigate()
   const { loggedIn } = useAuth()
   const [sp, setSp] = useSearchParams()
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [cats, setCats] = useState<Category[]>([])
   const [provinces, setProvinces] = useState<Province[]>([])
   const [districts, setDistricts] = useState<District[]>([])
@@ -187,7 +188,8 @@ export default function Home() {
       <section className="container" id="products">
         <div className="list-head">
           <h2>{keyword ? <>Kết quả cho “{keyword}”</> : 'Mới đăng gần đây'} <small>{total} tin</small></h2>
-          <div className="filters">
+          <button className="btn btn-soft mobile-filter-toggle" aria-expanded={filtersOpen} aria-controls="product-filters" onClick={() => setFiltersOpen((open) => !open)}>Bộ lọc ({[categoryId, subId, cond, minP, maxP, provinceId, districtId].filter(Boolean).length}) <Icon name={filtersOpen ? 'x' : 'plus'} size={18} /></button>
+          <div id="product-filters" className={`filters${filtersOpen ? ' filters-open' : ''}`}>
             <select className="select" value={sort} onChange={(e) => setParam({ sort_by: e.target.value === 'newest' ? '' : e.target.value })} aria-label="Sắp xếp">
               <option value="newest">Mới nhất</option>
               <option value="price_asc">Giá thấp → cao</option>

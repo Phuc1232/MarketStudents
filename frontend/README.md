@@ -36,3 +36,26 @@ Dữ liệu mẫu: chạy `seed_test_data.sql` để có danh mục, tình trạ
 | Tin nhắn | messages.html | `/messages?c=` | `/interaction/conversations*`, WS `/ws/chat/{id}` |
 | Thông báo | notifications.html | `/notifications` | `/interaction/notifications/*`, WS `/ws/notifications` |
 | Tài khoản | profile.html | `/profile?tab=` | `/user/profile/me`, `/user/address/me`, `/user/verify-student/*` |
+
+## Giao diện điện thoại và kiểm thử responsive
+
+CSS mobile nằm trong src/styles/mobile.css, nạp sau các CSS tính năng. Bố cục <=780px dùng điều hướng dưới, header gọn, bộ lọc thu gọn; chat có màn hình riêng và phản hồi theo visualViewport. Input 16px, form một cột, modal co theo vùng nhìn, viewport-fit=cover hỗ trợ safe-area. Grid sản phẩm hai cột từ 360px; dưới 360px dùng một cột. Tin của tôi có menu thao tác. Không đổi backend/database.
+
+Chạy kiểm thử với Chromium:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:responsive
+```
+
+Hoặc dùng Chrome có sẵn trên Windows:
+
+```powershell
+$env:PW_CHANNEL='chrome'
+npm run test:responsive
+```
+
+Tests dùng API/WebSocket giả lập; không tác động dữ liệu thật. Kiểm tra 320/360/390/430/768/1024/1440px trên 10 trang, chat màn ngang thấp, gửi tin, mở/đóng thông báo và modal sửa tin. Ảnh chụp trang chủ mobile/desktop, chat và bàn phím giả lập lưu trong test-results/ (không commit).
+
+Mô phỏng thay đổi visualViewport không thay thế bàn phím thiết bị thật. Cần kiểm tra thêm Safari iPhone/Chrome Android: bàn phím, xoay máy, phóng chữ, safe-area và gửi ảnh. Build production bằng npm run build.

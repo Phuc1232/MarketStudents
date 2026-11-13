@@ -1,3 +1,4 @@
+import ViewportSupport from '../components/ui/ViewportSupport'
 import { createBrowserRouter, Link, Navigate, Outlet, RouteObject, useLocation, useParams } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import MainLayout from '../components/layouts/MainLayout'
@@ -77,7 +78,7 @@ function adminPage(path: string, element: ReactElement): RouteObject[] {
 }
 
 function GlobalFeedback() {
-  return <><Outlet /><MessageNotification /><Toaster /></>
+  return <><ViewportSupport /><Outlet /><MessageNotification /><Toaster /></>
 }
 
 export const router = createBrowserRouter([

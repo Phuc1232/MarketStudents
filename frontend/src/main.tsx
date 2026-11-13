@@ -8,6 +8,7 @@ import './features/auth/auth.css'
 import './features/products/products.css'
 import './features/chat/messages.css'
 import './features/users/profile.css'
+import './styles/mobile.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

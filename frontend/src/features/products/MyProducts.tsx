@@ -1,3 +1,4 @@
+import ProductActions from '../../components/ui/ProductActions'
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
@@ -109,12 +110,12 @@ export default function MyProducts() {
                 <div className="mp-meta"><b>{fmtPrice(p.price)}</b><span>{CONDITIONS[p.condition_id]}</span><span><Icon name="eye" size={13} /> {p.view_count}</span><span>{timeAgo(p.CreatedAt)}</span></div>
               </div>
               {st && <span className={`badge badge-${st.tone}`}>{st.label}</span>}
-              <div className="mp-actions">
+              <ProductActions>
                 {p.status_id !== 3 && <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p.product_id)}><Icon name="edit" size={14} /> Sửa</button>}
                 {canToggle && <button className="btn btn-ghost btn-sm" onClick={() => act(() => api.patch(`/product/${p.product_id}/toggle-hide`), p.status_id === 2 ? 'Đã tạm ẩn tin' : 'Tin đã hiển thị lại')}><Icon name={p.status_id === 2 ? 'eyeoff' : 'eye'} size={14} /> {p.status_id === 2 ? 'Ẩn' : 'Hiện'}</button>}
                 {canToggle && <button className="btn btn-soft btn-sm" onClick={() => setSoldFor(p)}><Icon name="check" size={14} /> Đã bán</button>}
                 <button className="btn btn-danger btn-sm" onClick={() => confirm('Chuyển tin vào thùng rác? Bạn có 30 ngày để khôi phục.') && act(() => api.del(`/product/${p.product_id}`), 'Đã chuyển vào thùng rác')} aria-label="Xóa"><Icon name="trash" size={14} /></button>
-              </div>
+              </ProductActions>
             </div>
           )
         }))}

@@ -252,7 +252,7 @@ export default function AdminPortal() {
   }
 
   return (
-    <div className="container page" style={{ maxWidth: 1100 }}>
+    <div className="container page admin-page">
       <div className="page-head" style={{ marginBottom: 20 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -287,7 +287,7 @@ export default function AdminPortal() {
 
         {/* TAB 1: THỐNG KÊ DASHBOARD */}
         {!loading && tab === 'stats' && stats && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          <div className="admin-stats-grid">
             <div className="card" style={{ padding: 18 }}>
               <div className="hint">Tổng người dùng</div>
               <div style={{ fontSize: '2rem', fontWeight: 700, margin: '6px 0' }}>{stats.total_users}</div>

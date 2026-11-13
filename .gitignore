@@ -44,7 +44,7 @@ docs/
 tests/
 
 /tests/*
-
+browser-tests
 MEDIA_UPLOAD_DEPLOYMENT.md
 # ============================================
 # Python & Bytecode
@@ -161,3 +161,5 @@ frontend/.env.local
 
 # Frontend - Vite cache
 frontend/.vite/
+frontend/test-results/
+frontend/playwright-report/
