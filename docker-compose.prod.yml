@@ -46,6 +46,7 @@ services:
       - .env
     # Ghi đè cấu hình nội bộ
     environment:
+      APP_ENV: production
       REDIS_URL: redis://redis:6379/0
       AWS_EC2_METADATA_DISABLED: ${AWS_EC2_METADATA_DISABLED:-true}
     networks:

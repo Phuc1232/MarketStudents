@@ -112,7 +112,7 @@ function qs(params?: Query) {
   return s ? `?${s}` : ''
 }
 
-async function request<T>(method: string, path: string, opts: { params?: Query; json?: unknown; form?: URLSearchParams | FormData } = {}): Promise<T> {
+async function request<T>(method: string, path: string, opts: { params?: Query; json?: unknown; form?: URLSearchParams | FormData; signal?: AbortSignal } = {}): Promise<T> {
   const headers: Record<string, string> = {}
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
@@ -126,7 +126,7 @@ async function request<T>(method: string, path: string, opts: { params?: Query; 
 
   let res: Response
   try {
-    res = await fetch(`${API}${path}${qs(opts.params)}`, { method, headers, body })
+    res = await fetch(`${API}${path}${qs(opts.params)}`, { method, headers, body, signal: opts.signal })
   } catch {
     throw new ApiError(0, 'Không kết nối được máy chủ. Hãy kiểm tra backend đã chạy chưa.')
   }
@@ -148,11 +148,11 @@ async function request<T>(method: string, path: string, opts: { params?: Query; 
 
 export const api = {
   get: <T>(path: string, params?: Query) => request<T>('GET', path, { params }),
-  post: <T>(path: string, json?: unknown, params?: Query) => request<T>('POST', path, { json: json ?? undefined, params }),
+  post: <T>(path: string, json?: unknown, params?: Query, signal?: AbortSignal) => request<T>('POST', path, { json: json ?? undefined, params, signal }),
   put: <T>(path: string, json?: unknown) => request<T>('PUT', path, { json }),
   patch: <T>(path: string, json?: unknown, params?: Query) => request<T>('PATCH', path, { json: json ?? undefined, params }),
   del: <T>(path: string) => request<T>('DELETE', path),
-  upload: <T>(path: string, form: FormData) => request<T>('POST', path, { form }),
+  upload: <T>(path: string, form: FormData, signal?: AbortSignal) => request<T>('POST', path, { form, signal }),
   login: (email: string, password: string) =>
     request<{ access_token: string; token_type: string }>('POST', '/auth/login', {
       form: new URLSearchParams({ username: email, password }),

@@ -2,6 +2,7 @@ from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
+from uuid import UUID
 # ==============================================================================
 # ENUM SẮP XẾP SẢN PHẨM (SORTING)
 # ==============================================================================
@@ -40,11 +41,16 @@ class ProductImageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 # --- 3. ĐĂNG TIN & SỬA TIN (CREATE / UPDATE) ---
+class ProductUploadInput(BaseModel):
+    file_id: UUID
+    display_order: int = Field(default=0, ge=0, le=4)
+
+
 class ProductCreate(BaseModel):
     title: str = Field(..., min_length=5, max_length=255, description="Tiêu đề tin đăng bán")
     price: float = Field(..., ge=0, description="Giá bán sản phẩm VNĐ (>= 0)")
     description: Optional[str] = Field(None, description="Mô tả chi tiết sản phẩm")
-    thumbnails: Optional[str] = Field(None, description="Ảnh đại diện (nếu không nhập sẽ lấy ảnh đầu tiên)")
+    thumbnails: Optional[str] = Field(None, description="Deprecated: backend tự chọn thumbnail từ file_id; giá trị client gửi bị bỏ qua.")
     sub_category_id: int = Field(..., description="ID danh mục con (vd: 4 cho Laptop)")
     condition_id: int = Field(..., description="ID tình trạng (vd: 1=Mới, 2=Như mới, 3=Đã dùng)")
     
@@ -53,8 +59,8 @@ class ProductCreate(BaseModel):
     specific_address: Optional[str] = Field(None, description="Địa chỉ cụ thể (vd: KTX Khu B, Trường UTE)")
 
     # Giới hạn tối đa 5 ảnh đính kèm theo đúng đặc tả SRS (BR-3, AC-8)
-    images: List[ProductImageInput] = Field(
-        default=[], 
+    images: List[ProductUploadInput] = Field(
+        ...,
         min_length=1,
         max_length=5, 
         description="Danh sách ảnh đính kèm (tối đa 5 ảnh)"
@@ -70,9 +76,15 @@ class ProductUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=5, max_length=255)
     price: Optional[float] = Field(None, ge=0)
     description: Optional[str] = None
-    thumbnails: Optional[str] = None
+    thumbnails: Optional[str] = Field(None, description="Deprecated: backend tự chọn thumbnail từ images mới; giá trị client gửi bị bỏ qua.")
     condition_id: Optional[int] = None
     status_id: Optional[int] = None
+    images: Optional[List[ProductUploadInput]] = Field(
+        None,
+        min_length=1,
+        max_length=5,
+        description="Danh sách ảnh đính kèm mới nếu muốn cập nhật (1 đến 5 ảnh)"
+    )
 
 # --- 4. PHẢN HỒI DỮ LIỆU (RESPONSES) ---
 class SellerSummaryResponse(BaseModel):

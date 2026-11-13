@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
+APP_ENV = os.getenv("APP_ENV", "development").lower()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

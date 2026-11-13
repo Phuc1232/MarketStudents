@@ -14,6 +14,7 @@ from src.modules.Interaction import interaction_controller
 from src.modules.Admin import admin_controller, appeal_controller
 from src.modules.Upload import upload_router
 from src.cron_jobs.scheduler import start_scheduler, shutdown_scheduler
+from src.Core.config import APP_ENV
 
 
 @asynccontextmanager
@@ -45,7 +46,8 @@ app.add_middleware(
 
 # 3. Mount thư mục tĩnh phục vụ file upload ở môi trường local development
 os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+if APP_ENV not in {"production", "prod"}:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 4. Health Check Endpoints cho AWS Load Balancer (ALB) & Docker HEALTHCHECK
 @app.get("/health", tags=["Health Check"], summary="Load Balancer & Container Health Check")

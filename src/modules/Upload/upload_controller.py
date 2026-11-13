@@ -6,6 +6,10 @@ from src.modules.User.service import get_current_user
 from src.modules import User, StudentVerification
 from src.share.s3_service import storage_service
 from sqlalchemy import select
+from pydantic import BaseModel, Field
+from uuid import UUID
+from starlette.concurrency import run_in_threadpool
+from src.share.media_uploads import ensure_available, register_upload, inspect_upload
 
 router = APIRouter(
     prefix="/upload",
@@ -35,20 +39,24 @@ async def upload_multiple_images(
     files: List[UploadFile] = File(..., description="Danh sách từ 1 đến 5 file ảnh sản phẩm"),
     user: User = Depends(get_current_user)
 ):
-    if len(files) > 5:
+    if not 1 <= len(files) <= 5:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Mỗi sản phẩm chỉ được tải lên tối đa 5 hình ảnh!"
         )
 
+    await run_in_threadpool(ensure_available)
     uploaded_images = []
     for file in files:
         res = await storage_service.upload_media_image(file)
+        await run_in_threadpool(register_upload, user.id, res)
         uploaded_images.append({
             "image_url": res["raw_url"],
+            "thumbnail_url": res["thumbnail_url"],
             "detail_url": res["detail_url"],
             "raw_url": res["raw_url"],
-            "file_id": res["file_id"]
+            "file_id": res["file_id"],
+            "status": "processing" if res["storage"] == "S3" else "ready"
         })
 
     return {
@@ -56,6 +64,23 @@ async def upload_multiple_images(
         "count": len(uploaded_images),
         "images": uploaded_images
     }
+
+
+class ImageStatusRequest(BaseModel):
+    file_ids: List[UUID] = Field(min_length=1, max_length=5)
+
+
+@router.post("/images/status")
+def image_status(body: ImageStatusRequest, user: User = Depends(get_current_user)):
+    # Report failures per image so a single expired upload does not hide the others.
+    images = []
+    for file_id in body.file_ids:
+        try:
+            images.append(inspect_upload(str(file_id), user.id))
+        except HTTPException as exc:
+            images.append({"file_id": str(file_id), "status": "error",
+                           "error_code": exc.status_code, "message": exc.detail})
+    return {"images": images}
 
 
 @router.post("/private-document", status_code=status.HTTP_201_CREATED)

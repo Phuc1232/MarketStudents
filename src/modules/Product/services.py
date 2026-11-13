@@ -21,6 +21,9 @@ def get_all_product (db: Session):
     return db.scalars(select(Product)).all()
 
 def create_new_product (user_id: int, form: ProductCreate ,db: Session):
+    from src.share.media_uploads import resolve_product_images
+    ordered = sorted(form.images, key=lambda image: image.display_order)
+    verified_images = resolve_product_images([str(image.file_id) for image in ordered], user_id)
     subcat= db.get(SubCategory, form.sub_category_id)
     if not subcat:
         raise HTTPException(
@@ -33,9 +36,7 @@ def create_new_product (user_id: int, form: ProductCreate ,db: Session):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tình trạng sản phẩm ID {form.condition_id} không tồn tại"
         )
-    thumb = form.thumbnails
-    if not thumb and form.images:
-        thumb = form.images[0].image_url
+    thumb = verified_images[0]["thumbnail_url"]
     # Kiểm tra quyền: Super Admin (role_id = 1) được duyệt ngay; User thường bắt buộc qua Tiền kiểm (Pending_Approval)
     user_obj = db.get(User, user_id)
     initial_status_id = 2 if (user_obj and getattr(user_obj, "role_id", None) == 1) else 1
@@ -53,13 +54,12 @@ def create_new_product (user_id: int, form: ProductCreate ,db: Session):
     db.add(new_pro)
     db.flush()
 
-    for idx, img in enumerate(form.images[:5]):
-        is_thumb = img.is_thumbnail or (idx==0 and not any (img.is_thumbnail for i in form.images))
+    for idx, img in enumerate(verified_images):
         prod_img = ProductImage(
             product_id=new_pro.product_id,
-            image_url=img.image_url,
-            display_order=img.display_order if img.display_order else idx,
-            is_thumbnail=is_thumb
+            image_url=img["detail_url"],
+            display_order=idx,
+            is_thumbnail=idx == 0
         )
         db.add(prod_img)
     
@@ -318,8 +318,34 @@ def update_my_product (product_id: int, user_id: int, form: ProductUpdate, db: S
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bạn không có quyền chỉnh sửa tin đăng của người khác!"
         )
-    for field, value in form.model_dump(exclude_unset=True).items():
-        setattr(product,field,value)
+
+    # 1. Cập nhật ảnh sản phẩm mới nếu client có gửi danh sách images
+    if form.images is not None:
+        from src.share.media_uploads import resolve_product_images
+        ordered = sorted(form.images, key=lambda image: image.display_order)
+        verified_images = resolve_product_images([str(image.file_id) for image in ordered], user_id)
+
+        # Cập nhật ảnh đại diện thumbnail
+        product.thumbnails = verified_images[0]["thumbnail_url"]
+
+        # Xóa liên kết ảnh cũ trong DB
+        db.execute(delete(ProductImage).where(ProductImage.product_id == product_id))
+
+        # Lưu danh sách ảnh mới đã được xác minh
+        for idx, img in enumerate(verified_images):
+            prod_img = ProductImage(
+                product_id=product.product_id,
+                image_url=img["detail_url"],
+                display_order=idx,
+                is_thumbnail=(idx == 0)
+            )
+            db.add(prod_img)
+
+    # 2. Cập nhật các trường văn bản khác (loại trừ images và thumbnails do client gửi)
+    update_data = form.model_dump(exclude_unset=True, exclude={"images", "thumbnails"})
+    for field, value in update_data.items():
+        setattr(product, field, value)
+
     db.commit()
     db.refresh(product)
     return get_product_by_id(product.product_id,user_id,db)
@@ -645,7 +671,27 @@ def hard_delete_single_product(product: Product, db: Session):
     # Gỡ liên kết sản phẩm trong hội thoại để giữ nguyên lịch sử chat của người dùng
     db.execute(update(Conversation).where(Conversation.product_id == pid).values(product_id=None))
 
-    # Xóa ảnh sản phẩm
+    # Thu thập và dọn dẹp các object ảnh trên S3 trước khi xóa bản ghi
+    old_urls = list(db.scalars(select(ProductImage.image_url).where(ProductImage.product_id == pid)).all())
+    if product.thumbnails:
+        old_urls.append(product.thumbnails)
+    s3_keys = []
+    for u in old_urls:
+        if not u:
+            continue
+        for prefix in ("processed/thumbnails/", "processed/details/", "uploads/"):
+            idx = u.find(prefix)
+            if idx != -1:
+                s3_keys.append(u[idx:])
+                break
+    if s3_keys:
+        try:
+            from src.share.s3_service import storage_service
+            storage_service.delete_s3_media_objects(s3_keys)
+        except Exception:
+            pass
+
+    # Xóa ảnh sản phẩm trong DB
     db.execute(delete(ProductImage).where(ProductImage.product_id == pid))
 
     # Xóa thuộc tính kỹ thuật động EAV

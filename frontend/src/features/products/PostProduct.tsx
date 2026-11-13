@@ -1,9 +1,9 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
-import { api, Attribute, Category, CONDITIONS, District, errText, mediaUrl, Province, toast, Ward } from '../../lib/api'
+import { api, Attribute, Category, CONDITIONS, District, errText, Province, toast, Ward } from '../../lib/api'
+import { useProductUploads } from './useProductUploads'
 
-interface Uploaded { image_url: string }
 
 export default function PostProduct() {
   const nav = useNavigate()
@@ -13,8 +13,7 @@ export default function PostProduct() {
   const [wards, setWards] = useState<Ward[]>([])
   const [attrs, setAttrs] = useState<Attribute[]>([])
   const [attrVals, setAttrVals] = useState<Record<number, string>>({})
-  const [images, setImages] = useState<string[]>([])
-  const [uploading, setUploading] = useState(false)
+  const { images, add, remove, retry, ready } = useProductUploads()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -38,23 +37,17 @@ export default function PostProduct() {
     if (f.districtId) api.get<Ward[]>(`/masterdata/districts/${f.districtId}/ward`).then(setWards).catch(() => {})
   }, [f.districtId])
 
-  const pickFiles = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, 5 - images.length)
+  const pickFiles = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!files.length) return
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      files.forEach((x) => fd.append('files', x))
-      const r = await api.upload<{ images: Uploaded[] }>('/upload/images', fd)
-      setImages((o) => [...o, ...r.images.map((i) => i.image_url)].slice(0, 5))
-    } catch (e2) { toast(errText(e2), 'err') } finally { setUploading(false) }
+    add(files)
   }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setErr('')
     if (!images.length) return setErr('Hãy thêm ít nhất 1 ảnh cho món đồ.')
+    if (!ready || busy) return setErr('Vui lòng chờ ảnh xử lý xong hoặc thử lại ảnh lỗi.')
     if (!f.subId) return setErr('Hãy chọn danh mục.')
     setBusy(true)
     try {
@@ -68,12 +61,11 @@ export default function PostProduct() {
         title: f.title.trim(),
         price: Number(f.price),
         description: f.description.trim() || null,
-        thumbnails: images[0],
         sub_category_id: Number(f.subId),
         condition_id: Number(f.conditionId),
         ward_id: f.wardId ? Number(f.wardId) : null,
         specific_address: f.address.trim() || null,
-        images: images.map((u, i) => ({ image_url: u, display_order: i, is_thumbnail: i === 0 })),
+        images: images.map((image, i) => ({ file_id: image.file_id, display_order: i })),
         attributes,
       })
       toast(created.status_id === 1 ? 'Đã gửi tin, đang chờ duyệt!' : 'Đăng tin thành công!')
@@ -92,19 +84,25 @@ export default function PostProduct() {
         <div className="field">
           <span className="label">Hình ảnh ({images.length}/5)</span>
           <div className="img-grid">
-            {images.map((u, i) => (
-              <div key={u} className="img-tile">
-                <img src={mediaUrl(u)} alt={`Ảnh ${i + 1}`} />
+            {images.map((image, i) => (
+              <div key={image.id} className="img-tile">
+                <img src={image.preview} alt={`Ảnh ${i + 1}`} />
                 {i === 0 && <span className="img-cover">Ảnh bìa</span>}
-                <button type="button" onClick={() => setImages((o) => o.filter((x) => x !== u))} aria-label="Xóa ảnh"><Icon name="x" size={14} /></button>
+                <button type="button" disabled={busy} onClick={() => remove(image.id)} aria-label="Xóa ảnh"><Icon name="x" size={14} /></button>
               </div>
             ))}
             {images.length < 5 && (
               <label className="img-add">
-                <Icon name="plus" size={22} /><span>{uploading ? 'Đang tải...' : 'Thêm ảnh'}</span>
-                <input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={pickFiles} disabled={uploading} />
+                <Icon name="plus" size={22} /><span>Thêm ảnh</span>
+                <input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={pickFiles} disabled={busy} />
               </label>
             )}
+          </div>
+          <div aria-live="polite">
+            {images.map((image, i) => <p key={image.id}>
+              Ảnh {i + 1}: {image.status === 'uploading' ? 'Đang tải lên…' : image.status === 'processing' ? 'Đang xử lý…' : image.status === 'ready' ? 'Sẵn sàng' : image.message}
+              {image.status === 'error' && <button type="button" className="btn btn-soft btn-sm" disabled={busy} onClick={() => retry(image.id)}>Thử lại</button>}
+            </p>)}
           </div>
           <span className="hint">JPG, PNG hoặc WebP, tối đa 10MB mỗi ảnh. Ảnh đầu tiên là ảnh bìa.</span>
         </div>
@@ -160,7 +158,7 @@ export default function PostProduct() {
           <input className="input" value={f.address} onChange={(e) => set('address', e.target.value)} placeholder="Địa chỉ cụ thể (VD: KTX Khu B, cổng trường)" />
         </div>
 
-        <button className="btn btn-primary" disabled={busy || uploading}>{busy ? 'Đang đăng...' : 'Đăng tin'}</button>
+        <button className="btn btn-primary" disabled={busy || !ready}>{busy ? 'Đang đăng...' : 'Đăng tin'}</button>
       </form>
     </div>
   )

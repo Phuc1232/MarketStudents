@@ -1,5 +1,6 @@
 alembic==1.18.4
 APScheduler==3.11.3
+Pillow==12.3.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
