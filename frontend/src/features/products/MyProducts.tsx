@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import { api, CONDITIONS, errText, fmtPrice, mediaUrl, Paginated, ProductDetail, ProductListItem, STATUSES, timeAgo, toast } from '../../lib/api'
 
@@ -14,7 +14,11 @@ function Thumb({ src }: { src?: string | null }) {
 }
 
 export default function MyProducts() {
-  const [tab, setTab] = useState<Tab>('selling')
+  const [search, setSearch] = useSearchParams()
+  const reviewId = Number(search.get('review')) || 0
+  const requestedTab = search.get('tab')
+  const tab: Tab = reviewId > 0 || requestedTab === 'bought' ? 'bought' : requestedTab === 'trash' ? 'trash' : 'selling'
+  const setTab = (next: Tab) => setSearch({ tab: next })
   const [selling, setSelling] = useState<ProductListItem[]>([])
   const [trash, setTrash] = useState<Trash[]>([])
   const [bought, setBought] = useState<Bought[]>([])
@@ -22,6 +26,7 @@ export default function MyProducts() {
   const [editing, setEditing] = useState<ProductDetail | null>(null)
   const [soldFor, setSoldFor] = useState<ProductListItem | null>(null)
   const [reviewFor, setReviewFor] = useState<Bought | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
 
   const load = useCallback(async (t: Tab) => {
     setLoading(true)
@@ -32,6 +37,40 @@ export default function MyProducts() {
     } catch (e) { toast(errText(e), 'err') } finally { setLoading(false) }
   }, [])
   useEffect(() => { load(tab) }, [tab, load])
+
+  // Resolve against the authenticated user's purchases before opening a review.
+  // The target can be older than the first page of purchases.
+  useEffect(() => {
+    if (!Number.isSafeInteger(reviewId) || reviewId <= 0) { setReviewLoading(false); return }
+    let cancelled = false
+    setReviewFor(null); setReviewLoading(true)
+    const clearTarget = () => setSearch((current) => {
+      const next = new URLSearchParams(current)
+      if (Number(next.get('review')) === reviewId) next.delete('review')
+      return next
+    }, { replace: true })
+    ;(async () => {
+      try {
+        let page = 1
+        let found: Bought | undefined
+        while (!cancelled) {
+          const result = await api.get<Paginated<Bought>>('/product/my-purchases', { page, page_size: 100 })
+          if (cancelled) return
+          found = result.items.find((item) => item.product_id === reviewId)
+          if (found || !result.items.length || page * 100 >= result.total) break
+          page++
+        }
+        if (cancelled) return
+        if (!found) toast('Không tìm thấy món hàng này trong danh sách đã mua của bạn.', 'err')
+        else if (found.has_reviewed) toast('Bạn đã đánh giá giao dịch này rồi.')
+        else setReviewFor(found)
+        clearTarget()
+      } catch (e) {
+        if (!cancelled) { toast(errText(e), 'err'); clearTarget() }
+      } finally { if (!cancelled) setReviewLoading(false) }
+    })()
+    return () => { cancelled = true }
+  }, [reviewId, setSearch])
 
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     try { await fn(); toast(ok); load(tab) } catch (e) { toast(errText(e), 'err') }
@@ -54,6 +93,7 @@ export default function MyProducts() {
       </div>
 
       <div className="mp-list">
+        {reviewLoading && <div className="loading" role="status">Đang mở giao dịch cần đánh giá...</div>}
         {loading && <div className="loading">Đang tải...</div>}
 
         {!loading && tab === 'selling' && (selling.length === 0 ? (

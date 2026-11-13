@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices, field_validator
 from typing import Optional, List, Literal
 from datetime import datetime, timezone
 
@@ -131,6 +131,15 @@ class MessageAttachmentResponse(BaseModel):
 
 class MessageCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000, description="Nội dung tin nhắn")
+
+    @field_validator("content")
+    @classmethod
+    def nonempty_content(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Nội dung tin nhắn không được để trống.")
+        return value
+
     attachments: Optional[List[str]] = Field(default=None, description="Danh sách URL hình ảnh đính kèm (nếu có)")
 
 
@@ -233,6 +242,7 @@ class WSNewMessageEvent(BaseModel):
 class WSReadReceiptData(BaseModel):
     conversation_id: int
     reader_id: int
+    last_read_message_id: Optional[int] = None
     read_at: datetime
 
 
@@ -286,6 +296,8 @@ class NotificationResponse(BaseModel):
     message: Optional[str] = None
     action_link: Optional[str] = None
     is_read: bool
+
+    created_at: Optional[datetime] = Field(default=None, validation_alias=AliasChoices("created_at", "CreatedAt"))
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -410,4 +422,4 @@ class PaginatedFollowersResponse(BaseModel):
     page_size: int
     items: List[FollowUserItemResponse]
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)

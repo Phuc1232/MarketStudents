@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Icon from '../ui/Icon'
-import Toaster from '../ui/Toaster'
-import { api, toast, useAuth, wsUrl } from '../../lib/api'
+import { useAuth } from '../../lib/api'
+import { useRealtime } from '../../providers/RealtimeProvider'
+import NotificationDropdown from '../../features/notifications/NotificationDropdown'
 
 export default function MainLayout() {
   const { loggedIn, logout } = useAuth()
@@ -10,39 +11,10 @@ export default function MainLayout() {
   const loc = useLocation()
   const [sp] = useSearchParams()
   const [q, setQ] = useState(sp.get('keyword') ?? '')
-  const [unread, setUnread] = useState(0)
+  const { messageUnread } = useRealtime()
 
   useEffect(() => { if (loc.pathname === '/' || loc.pathname === '/index.html') setQ(sp.get('keyword') ?? '') }, [loc.pathname, sp])
   useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
-
-  // Số thông báo chưa đọc: lấy 1 lần + cập nhật realtime qua WebSocket
-  useEffect(() => {
-    if (!loggedIn) { setUnread(0); return }
-    api.get<{ unread_count: number }>('/interaction/notifications/unread-count').then((r) => setUnread(r.unread_count)).catch(() => {})
-    let ws: WebSocket | null = null
-    let ping: number | undefined
-    let closed = false
-    const connect = () => {
-      ws = new WebSocket(wsUrl('/interaction/ws/notifications'))
-      ws.onopen = () => { ping = window.setInterval(() => ws?.readyState === 1 && ws.send(JSON.stringify({ action: 'ping' })), 25000) }
-      ws.onmessage = (ev) => {
-        try {
-          const m = JSON.parse(ev.data)
-          if (m.type === 'new_notification') {
-            if (typeof m.unread_count === 'number') setUnread(m.unread_count)
-            else setUnread((n) => n + 1)
-            toast(m.data?.title ?? 'Bạn có thông báo mới')
-            window.dispatchEvent(new CustomEvent('cm:notification', { detail: m.data }))
-          }
-        } catch { /* bỏ qua */ }
-      }
-      ws.onclose = (e) => { window.clearInterval(ping); if (!closed && e.code !== 4401) setTimeout(connect, 4000) }
-    }
-    connect()
-    const onRead = (e: Event) => setUnread((e as CustomEvent).detail ?? 0)
-    window.addEventListener('cm:unread', onRead)
-    return () => { closed = true; window.clearInterval(ping); ws?.close(); window.removeEventListener('cm:unread', onRead) }
-  }, [loggedIn])
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -69,10 +41,13 @@ export default function MainLayout() {
 
           <nav className="header-nav" aria-label="Chính">
             <NavLink to="/favorites"><Icon name="heart" size={20} /> Yêu thích</NavLink>
-            <NavLink to="/messages"><Icon name="chat" size={20} /> Tin nhắn</NavLink>
+            <NavLink to="/messages" aria-label={`Tin nhắn${messageUnread ? `, ${messageUnread} chưa đọc` : ''}`}>
+              <Icon name="chat" size={20} /> Tin nhắn
+              {messageUnread > 0 && <span className="nav-badge">{messageUnread > 99 ? '99+' : messageUnread}</span>}
+            </NavLink>
+            {loggedIn && <NotificationDropdown />}
             <NavLink to="/profile" className="nav-account">
               <Icon name="user" size={20} /> Tài khoản
-              {unread > 0 && <span className="nav-badge" aria-label={`${unread} thông báo chưa đọc`}>{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
             {loggedIn ? (
               <button className="nav-icon" onClick={() => { logout(); nav('/') }} aria-label="Đăng xuất" title="Đăng xuất"><Icon name="logout" size={22} /></button>
@@ -101,7 +76,6 @@ export default function MainLayout() {
         </div>
         <div className="footer-copy">© {new Date().getFullYear()} chợmình – Market for Students</div>
       </footer>
-      <Toaster />
     </>
   )
 }

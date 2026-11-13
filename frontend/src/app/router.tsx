@@ -1,6 +1,8 @@
-import { createBrowserRouter, Link, Navigate, RouteObject, useLocation } from 'react-router-dom'
+import { createBrowserRouter, Link, Navigate, Outlet, RouteObject, useLocation, useParams } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import MainLayout from '../components/layouts/MainLayout'
+import MessageNotification from '../components/ui/MessageNotification'
+import Toaster from '../components/ui/Toaster'
 import { useAuth } from '../lib/api'
 import Login from '../features/auth/Login'
 import Register from '../features/auth/Register'
@@ -43,6 +45,25 @@ function NotFound() {
   )
 }
 
+/** Keep notifications already stored with the old paths usable. */
+function LegacyDetail({ kind }: { kind: 'product' | 'seller' }) {
+  const { id } = useParams()
+  const loc = useLocation()
+  const query = new URLSearchParams(loc.search)
+  query.set('id', id ?? '')
+  return <Navigate to={`/${kind}?${query.toString()}${loc.hash}`} replace />
+}
+
+function ProductPage() {
+  const loc = useLocation()
+  const query = new URLSearchParams(loc.search)
+  const id = Number(query.get('id'))
+  if (query.get('open_review') === 'true' && Number.isSafeInteger(id) && id > 0) {
+    return <Navigate to={`/my-products?tab=bought&review=${id}`} replace />
+  }
+  return <ProductDetail />
+}
+
 /** Mỗi trang có 2 đường dẫn: /login và /login.html (khớp các file HTML ở thư mục gốc). */
 function page(path: string, element: ReactElement, auth = false): RouteObject[] {
   const el = auth ? <RequireAuth>{element}</RequireAuth> : element
@@ -55,7 +76,12 @@ function adminPage(path: string, element: ReactElement): RouteObject[] {
   return [{ path, element: el }, { path: `${path}.html`, element: el }]
 }
 
+function GlobalFeedback() {
+  return <><Outlet /><MessageNotification /><Toaster /></>
+}
+
 export const router = createBrowserRouter([
+  { element: <GlobalFeedback />, children: [
   // Trang độc lập không có header/footer của khách mua hàng
   ...page('/login', <Login />),
   ...page('/register', <Register />),
@@ -65,7 +91,9 @@ export const router = createBrowserRouter([
     element: <MainLayout />,
     children: [
       ...page('/', <Home />),
-      ...page('/product', <ProductDetail />),
+      ...page('/product', <ProductPage />),
+      { path: '/product/:id', element: <LegacyDetail kind="product" /> },
+      { path: '/user/:id', element: <LegacyDetail kind="seller" /> },
       ...page('/post', <PostProduct />, true),
       ...page('/my-products', <MyProducts />, true),
       ...page('/favorites', <Favorites />, true),
@@ -76,4 +104,5 @@ export const router = createBrowserRouter([
       { path: '*', element: <NotFound /> },
     ],
   },
+  ] },
 ])

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, status, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, status, Query, WebSocket, WebSocketDisconnect, HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import json
@@ -67,7 +68,9 @@ from src.modules.Interaction.services import (
     create_user_report,
     get_my_submitted_reports,
     get_user_followers_list,
-    get_user_following_list
+    get_user_following_list,
+    get_unread_messages_count, publish_message, read_conversation_and_publish,
+    publish_notifications_updated
 )
 
 router = APIRouter(
@@ -221,6 +224,9 @@ def list_messages(
     conversation_id: int,
     page: int = Query(1, ge=1, description="Số trang hiện tại"),
     page_size: int = Query(20, ge=1, le=100, description="Số tin nhắn mỗi trang"),
+    newest_first: bool = Query(False),
+    before_id: Optional[int] = Query(None, ge=1),
+    after_id: Optional[int] = Query(None, ge=1),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -233,7 +239,7 @@ def list_messages(
         user_id=user.id,
         page=page,
         page_size=page_size,
-        db=db
+        db=db, newest_first=newest_first, before_id=before_id, after_id=after_id
     )
 
 
@@ -243,20 +249,18 @@ def list_messages(
     status_code=status.HTTP_200_OK,
     summary="Đánh dấu tất cả tin nhắn đối phương gửi là đã đọc (BR-6)"
 )
-def read_all_messages(
+async def read_all_messages(
     conversation_id: int,
+    last_read_message_id: Optional[int] = Query(None, ge=1),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    - **BR-6**: Cập nhật trạng thái `is_read = True` cho tất cả tin nhắn đối phương gửi đến.
-    - Giúp xóa chấm đỏ / thông báo tin nhắn chưa đọc trong hộp thư.
-    """
-    return mark_messages_as_read(
-        conversation_id=conversation_id,
-        user_id=user.id,
-        db=db
-    )
+    return await read_conversation_and_publish(conversation_id, user.id, db, last_read_message_id)
+
+
+@router.get("/messages/unread-count")
+def unread_message_count(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return get_unread_messages_count(user.id, db)
 
 
 @router.post(
@@ -265,7 +269,7 @@ def read_all_messages(
     status_code=status.HTTP_201_CREATED,
     summary="Gửi tin nhắn vào cuộc hội thoại qua REST API"
 )
-def send_message_http(
+async def send_message_http(
     conversation_id: int,
     form: MessageCreate,
     user: User = Depends(get_current_user),
@@ -274,12 +278,15 @@ def send_message_http(
     """
     Gửi tin nhắn nhanh qua giao thức REST HTTP (Body JSON: {"content": "...", "attachments": [...]}).
     """
-    return send_message_rest(
+    result = send_message_rest(
         conversation_id=conversation_id,
         user_id=user.id,
         form=form,
         db=db
     )
+
+    await publish_message(result, db)
+    return result
 
 
 # ==============================================================================
@@ -364,72 +371,25 @@ async def websocket_chat_endpoint(
             # SỰ KIỆN 1: GỬI TIN NHẮN MỚI ("send_message")
             # ------------------------------------------------------------------
             if action == "send_message":
-                content = str(payload.get("content") or "").strip()
-                attachments = payload.get("attachments") or []
+                try:
+                    form = MessageCreate(content=payload.get("content"), attachments=payload.get("attachments"))
+                    with SessionLocal() as db:
+                        msg_item = send_message_rest(conversation_id, user_id, form, db)
+                        await publish_message(msg_item, db)
+                except (ValidationError, HTTPException) as exc:
+                    detail = exc.detail if isinstance(exc, HTTPException) else "Nội dung hoặc tệp đính kèm không hợp lệ."
+                    await manager.send_personal_message(websocket, {"type": "error", "message": detail})
 
-                if not content:
-                    await manager.send_personal_message(websocket, {
-                        "type": "error",
-                        "message": "Nội dung tin nhắn không được để trống hoặc chỉ chứa khoảng trắng."
-                    })
-                    continue
-
-                if len(content) > 2000:
-                    await manager.send_personal_message(websocket, {
-                        "type": "error",
-                        "message": "Nội dung tin nhắn vượt quá giới hạn 2000 ký tự."
-                    })
-                    continue
-
-                # Lưu DB bằng Session ngắn hạn độc lập (Thread-safe & Pool-safe)
-                with SessionLocal() as db:
-                    msg_item = save_websocket_message(
-                        conversation_id=conversation_id,
-                        sender_id=user_id,
-                        content=content,
-                        attachments=attachments,
-                        db=db
-                    )
-
-                # Đóng gói sự kiện broadcast chuẩn giao thức AC-12
-                event_data = {
-                    "type": "new_message",
-                    "data": {
-                        "message_id": msg_item.message_id,
-                        "conversation_id": msg_item.conversation_id,
-                        "sender_id": msg_item.sender_id,
-                        "content": msg_item.content,
-                        "is_read": msg_item.is_read,
-                        "sent_at": msg_item.sent_at.isoformat(),
-                        "attachments": [
-                            {
-                                "attachment_id": att.attachment_id,
-                                "file_url": att.file_url,
-                                "file_type": att.file_type
-                            } for att in msg_item.attachments
-                        ]
-                    }
-                }
-                # Phát tán tức thời cho toàn bộ người dùng đang online trong phòng chat
-                await manager.broadcast_to_room(conversation_id, event_data)
-
-            # ------------------------------------------------------------------
-            # SỰ KIỆN 2: BÁO ĐÃ XEM TIN NHẮN ("mark_read")
-            # ------------------------------------------------------------------
             elif action == "mark_read":
-                with SessionLocal() as db:
-                    mark_websocket_messages_as_read(conversation_id, user_id, db)
-
-                now_iso = datetime.now(timezone.utc).isoformat()
-                event_data = {
-                    "type": "read_receipt",
-                    "data": {
-                        "conversation_id": conversation_id,
-                        "reader_id": user_id,
-                        "read_at": now_iso
-                    }
-                }
-                await manager.broadcast_to_room(conversation_id, event_data)
+                boundary = payload.get("last_read_message_id")
+                if boundary is not None and (type(boundary) is not int or boundary < 1):
+                    await manager.send_personal_message(websocket, {"type": "error", "message": "Mã tin nhắn đã đọc không hợp lệ."})
+                    continue
+                try:
+                    with SessionLocal() as db:
+                        await read_conversation_and_publish(conversation_id, user_id, db, boundary)
+                except HTTPException as exc:
+                    await manager.send_personal_message(websocket, {"type": "error", "message": exc.detail})
 
             # ------------------------------------------------------------------
             # SỰ KIỆN 3: HEARTBEAT NHỊP TIM ("ping")
@@ -565,13 +525,15 @@ def list_potential_buyers(
     summary="Lấy danh sách thông báo của tôi (Seq 7 Bước 2, Seq 8)"
 )
 def get_my_notifications(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Lấy danh sách thông báo để hiển thị danh sách lời mời đánh giá, bình luận, follow (Seq 7, 8).
     """
-    return get_user_notifications(user_id=user.id, db=db)
+    return get_user_notifications(user_id=user.id, db=db, page=page, limit=page_size)
 
 
 @router.get(
@@ -595,12 +557,14 @@ def get_unread_count(
     status_code=status.HTTP_200_OK,
     summary="Đánh dấu thông báo là đã đọc khi click mở (Seq 7 Bước 2, Seq 8)"
 )
-def mark_notification_read(
+async def mark_notification_read(
     notification_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return mark_notification_as_read(notification_id=notification_id, user_id=user.id, db=db)
+    result = mark_notification_as_read(notification_id=notification_id, user_id=user.id, db=db)
+    await publish_notifications_updated(user.id, db)
+    return result
 
 
 @router.patch(
@@ -609,11 +573,13 @@ def mark_notification_read(
     status_code=status.HTTP_200_OK,
     summary="Đánh dấu toàn bộ thông báo của tôi là đã đọc (Seq 8)"
 )
-def mark_all_read(
+async def mark_all_read(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return mark_all_notifications_as_read(user_id=user.id, db=db)
+    result = mark_all_notifications_as_read(user_id=user.id, db=db)
+    await publish_notifications_updated(user.id, db)
+    return result
 
 
 # ==============================================================================
@@ -730,6 +696,7 @@ async def websocket_notifications_endpoint(
                     with SessionLocal() as db:
                         try:
                             mark_notification_as_read(notification_id=noti_id, user_id=user_id, db=db)
+                            await publish_notifications_updated(user_id, db)
                             await manager.send_personal_message(websocket, {
                                 "type": "notification_read_ack",
                                 "notification_id": noti_id
@@ -741,6 +708,7 @@ async def websocket_notifications_endpoint(
                 with SessionLocal() as db:
                     try:
                         mark_all_notifications_as_read(user_id=user_id, db=db)
+                        await publish_notifications_updated(user_id, db)
                         await manager.send_personal_message(websocket, {
                             "type": "notification_read_all_ack"
                         })

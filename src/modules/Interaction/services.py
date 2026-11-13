@@ -3,6 +3,7 @@ from sqlalchemy import select, func, and_, or_, update
 from fastapi import HTTPException, status
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
+import logging
 from src.share.uilts import SECRET_KEY, ALGORITHM, jwt
 from src.modules import (
     FavoriteToggleResponse,
@@ -259,7 +260,7 @@ async def create_product_comment(
             user_id=noti_target_user_id,
             title=noti_title,
             message=noti_msg,
-            action_link=f"/product/{product_id}",
+            action_link=f"/product?id={product_id}",
             is_read=False
         )
         db.add(new_noti)
@@ -644,7 +645,10 @@ def get_conversation_messages(
     user_id: int,
     page: int = 1,
     page_size: int = 20,
-    db: Session = None
+    db: Session = None,
+    newest_first: bool = False,
+    before_id: Optional[int] = None,
+    after_id: Optional[int] = None,
 ) -> PaginatedMessagesResponse:
     """
     Lấy danh sách lịch sử tin nhắn trong một cuộc hội thoại có phân trang.
@@ -682,10 +686,14 @@ def get_conversation_messages(
         select(Message)
         .options(selectinload(Message.attachments))
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.sent_at.asc())
+        .order_by(Message.message_id.desc() if newest_first else Message.message_id.asc())
         .offset(offset)
         .limit(page_size)
     )
+    if before_id is not None:
+        stmt_msgs = stmt_msgs.where(Message.message_id < before_id)
+    if after_id is not None:
+        stmt_msgs = stmt_msgs.where(Message.message_id > after_id)
     messages = db.scalars(stmt_msgs).all()
 
     # 4. Map dữ liệu sang Pydantic DTO
@@ -721,7 +729,8 @@ def get_conversation_messages(
 def mark_messages_as_read(
     conversation_id: int,
     user_id: int,
-    db: Session
+    db: Session,
+    last_read_message_id: Optional[int] = None,
 ) -> MessageResponse:
     """
     Đánh dấu tất cả tin nhắn đối phương gửi trong hội thoại này thành đã đọc (is_read = True).
@@ -754,6 +763,8 @@ def mark_messages_as_read(
         )
         .values(is_read=True)
     )
+    if last_read_message_id is not None:
+        stmt_update = stmt_update.where(Message.message_id <= last_read_message_id)
     db.execute(stmt_update)
     db.commit()
 
@@ -882,90 +893,93 @@ def verify_conversation_member(conversation_id: int, user_id: int, db: Session) 
 
 
 def save_websocket_message(
-    conversation_id: int,
-    sender_id: int,
-    content: str,
-    attachments: Optional[List[str]],
-    db: Session
+    conversation_id: int, sender_id: int, content: str,
+    attachments: Optional[List[str]], db: Session,
 ) -> MessageResponseItem:
-    """
-    Lưu tin nhắn gửi qua WebSocket vào cơ sở dữ liệu.
-    - Cập nhật conversations.last_message_at.
-    - Tạo các bản ghi MessageAttachment nếu có ảnh đính kèm.
-    - Trả về DTO MessageResponseItem để đóng gói sự kiện broadcast.
-    - Covers: AC-12
-    """
-    now_time = datetime.now(timezone.utc)
-    new_msg = Message(
-        conversation_id=conversation_id,
-        sender_id=sender_id,
-        content=content.strip(),
-        is_read=False,
-        sent_at=now_time
-    )
-    db.add(new_msg)
-    db.flush()
-
-    att_dtos: List[MessageAttachmentResponse] = []
-    if attachments:
-        for url in attachments:
-            clean_url = str(url).strip()
-            if clean_url:
-                new_att = MessageAttachment(
-                    message_id=new_msg.message_id,
-                    file_url=clean_url,
-                    file_type="image"
-                )
-                db.add(new_att)
-                db.flush()
-                att_dtos.append(
-                    MessageAttachmentResponse(
-                        attachment_id=new_att.attachment_id,
-                        file_url=new_att.file_url,
-                        file_type=new_att.file_type
-                    )
-                )
-
-    conv = db.get(Conversation, conversation_id)
-    if conv:
-        conv.last_message_at = now_time
-
-    db.commit()
-    db.refresh(new_msg)
-
-    return MessageResponseItem(
-        message_id=new_msg.message_id,
-        conversation_id=new_msg.conversation_id,
-        sender_id=new_msg.sender_id,
-        content=new_msg.content,
-        is_read=new_msg.is_read,
-        sent_at=new_msg.sent_at,
-        attachments=att_dtos
-    )
+    """REST and WebSocket use the same validation, authorization and transaction."""
+    return send_message_rest(conversation_id, sender_id,
+                             MessageCreate(content=content, attachments=attachments), db)
 
 
 def mark_websocket_messages_as_read(
-    conversation_id: int,
-    reader_id: int,
-    db: Session
-) -> int:
-    """
-    Đánh dấu tất cả tin nhắn do đối phương gửi trong hội thoại là đã đọc (is_read = True).
-    Trả về số lượng tin nhắn đã được cập nhật.
-    - Covers: BR-6, AC-12
-    """
-    stmt_update = (
-        update(Message)
-        .where(
-            Message.conversation_id == conversation_id,
-            Message.sender_id != reader_id,
-            Message.is_read == False
-        )
-        .values(is_read=True)
-    )
-    result = db.execute(stmt_update)
-    db.commit()
-    return result.rowcount or 0
+    conversation_id: int, reader_id: int, db: Session,
+    last_read_message_id: Optional[int] = None,
+):
+    return mark_messages_as_read(conversation_id, reader_id, db, last_read_message_id)
+
+
+def get_unread_messages_count(user_id: int, db: Session) -> dict:
+    membership = select(Participation.conversation_id).where(
+        or_(Participation.buyer_id == user_id, Participation.seller_id == user_id))
+    count = db.scalar(select(func.count()).select_from(Message).where(
+        Message.conversation_id.in_(membership), Message.sender_id != user_id,
+        Message.is_read.is_(False))) or 0
+    return {"unread_count": count}
+
+
+def conversation_recipients(conversation_id: int, db: Session) -> set:
+    rows = db.scalars(select(Participation).where(
+        Participation.conversation_id == conversation_id)).all()
+    return {uid for row in rows for uid in (row.buyer_id, row.seller_id) if uid is not None}
+
+
+async def publish_message(msg: MessageResponseItem, db: Session) -> None:
+    """Best effort after commit: transport failure must not make a saved send fail."""
+    event = {"type": "new_message", "event_id": f"message:{msg.message_id}",
+             "data": msg.model_dump(mode="json")}
+    recipients = set()
+    try:
+        recipients = conversation_recipients(msg.conversation_id, db)
+        sender = db.get(User, msg.sender_id)
+        event["data"]["sender"] = {"user_id": msg.sender_id,
+            "full_name": get_user_display_name(sender), "avatar_url": get_user_avatar(sender)}
+        conv = db.get(Conversation, msg.conversation_id)
+        if conv and conv.product:
+            product = conv.product
+            event["data"]["product"] = {"product_id": product.product_id,
+                "title": product.title, "price": float(product.price),
+                "thumbnail_url": get_product_thumbnails(product)}
+    except Exception:
+        logging.getLogger(__name__).exception("Could not prepare message event metadata")
+    try:
+        await manager.broadcast_to_room(msg.conversation_id, event)
+    except Exception:
+        logging.getLogger(__name__).exception("Room message delivery failed after commit")
+    for uid in recipients:
+        try:
+            await manager.send_to_user(uid, event)
+        except Exception:
+            logging.getLogger(__name__).exception("User message delivery failed after commit")
+
+
+async def read_conversation_and_publish(conversation_id: int, user_id: int,
+                                       db: Session, last_read_message_id: Optional[int] = None):
+    # Bound legacy read-all requests too, so the receipt cannot include later arrivals.
+    if not verify_conversation_member(conversation_id, user_id, db):
+        raise HTTPException(status_code=403, detail="Bạn không có quyền đọc hội thoại này.")
+    latest = db.scalar(select(func.max(Message.message_id)).where(
+        Message.conversation_id == conversation_id)) or 0
+    boundary = latest if last_read_message_id is None else min(last_read_message_id, latest)
+    result = mark_messages_as_read(conversation_id, user_id, db, boundary)
+    event = {"type": "read_receipt", "data": {"conversation_id": conversation_id,
+        "reader_id": user_id, "last_read_message_id": boundary,
+        "read_at": datetime.now(timezone.utc).isoformat()}}
+    try:
+        recipients = conversation_recipients(conversation_id, db)
+        await manager.broadcast_to_room(conversation_id, event)
+        for uid in recipients:
+            await manager.send_to_user(uid, event)
+    except Exception:
+        logging.getLogger(__name__).exception("Read receipt delivery failed after commit")
+    return result
+
+
+async def publish_notifications_updated(user_id: int, db: Session):
+    try:
+        await manager.send_to_user(user_id, {"type": "notifications_updated",
+            **get_unread_notifications_count(user_id, db)})
+    except Exception:
+        logging.getLogger(__name__).exception("Notification sync failed after commit")
 
 
 # ==============================================================================
@@ -1335,7 +1349,7 @@ async def toggle_follow_user(follower_id: int, followed_id: int, db: Session) ->
             user_id=followed_id,
             title="Có người theo dõi mới",
             message=f"{follower_name} vừa bắt đầu theo dõi bạn.",
-            action_link=f"/user/{follower_id}",
+            action_link=f"/seller?id={follower_id}",
             is_read=False
         )
         db.add(follow_noti)
@@ -1432,7 +1446,7 @@ async def process_mark_sold_and_notify_buyer(
             user_id=buyer_id,
             title="Mời bạn đánh giá giao dịch",
             message=f"Bạn vừa hoàn tất mua món đồ '{product.title}'. Hãy để lại đánh giá 1-5 sao cho người bán nhé!",
-            action_link=f"/product/{product_id}?open_review=true",
+            action_link=f"/my-products?tab=bought&review={product_id}",
             is_read=False
         )
         db.add(created_notification)
@@ -1466,12 +1480,13 @@ async def process_mark_sold_and_notify_buyer(
     }
 
 
-def get_user_notifications(user_id: int, db: Session, limit: int = 20) -> List[Notification]:
+def get_user_notifications(user_id: int, db: Session, limit: int = 20, page: int = 1) -> List[Notification]:
     """Lấy danh sách thông báo của người dùng (Seq 7 Bước 2, Seq 8)."""
     stmt = (
         select(Notification)
         .where(Notification.user_id == user_id)
         .order_by(Notification.notification_id.desc())
+        .offset((page - 1) * limit)
         .limit(limit)
     )
     return list(db.scalars(stmt).all())

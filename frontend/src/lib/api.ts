@@ -13,6 +13,9 @@ const TOKEN_KEY = 'cm_token'
 /*  Token & trạng thái đăng nhập                                       */
 /* ------------------------------------------------------------------ */
 const listeners = new Set<() => void>()
+window.addEventListener('storage', (event) => {
+  if (event.key === TOKEN_KEY || event.key === null) listeners.forEach((listener) => listener())
+})
 export const getToken = () => localStorage.getItem(TOKEN_KEY)
 
 export function setToken(token: string | null) {
